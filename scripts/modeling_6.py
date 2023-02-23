@@ -85,8 +85,8 @@ def get_cmap(mname, load_best=True, sym=False):
 
     return cmap.colors
 
-def result_6_eval(K=[10], model_type=['03','04'], t_datasets=['MDTB','Pontine','Nishimoto'],
-                  test_ses=None):
+def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
+                  out_name=None):
     """Evaluate group and individual DCBC and coserr of IBC single
        sessions on all other test datasets.
     Args:
@@ -94,28 +94,19 @@ def result_6_eval(K=[10], model_type=['03','04'], t_datasets=['MDTB','Pontine','
     Returns:
         Write in evaluation file
     """
-    sess = DataSetIBC(base_dir + '/IBC').sessions
-    if test_ses is not None:
-        sess = [test_ses]
+    if not isinstance(model_name, list):
+        model_name = [model_name]
 
-    model_name = []
-    # Making all IBC indiv sessions list
-    for mt in model_type:
-        model_name += [f'Models_{mt}/asym_Ib_space-MNISymC3_K-{this_k}_{s}'
-                       for this_k in K for s in sess]
-
-        # Additionally, add all IBC sessions fusion to list
-        model_name += [f'Models_{mt}/asym_Ib_space-MNISymC3_K-{this_k}'
-                       for this_k in K]
-
+    T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     results = pd.DataFrame()
     # Evaluate all single sessions on other datasets
     for ds in t_datasets:
         print(f'Testdata: {ds}\n')
-
         # Preparing atlas, cond_vec, part_vec
+        this_type = T.loc[T.name == ds]['default_type'].item()
         atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
-        tdata, tinfo, tds = get_dataset(base_dir, ds, atlas='MNISymC3', sess='all')
+        tdata, tinfo, tds = get_dataset(base_dir, ds, atlas='MNISymC3',
+                                        sess='all', type=this_type)
         cond_vec = tinfo[tds.cond_ind].values.reshape(-1, ) # default from dataset class
         part_vec = tinfo['half'].values
         # part_vec = np.ones((tinfo.shape[0],), dtype=int)
@@ -136,21 +127,14 @@ def result_6_eval(K=[10], model_type=['03','04'], t_datasets=['MDTB','Pontine','
             res_dcbc['indivtrain_ind'] = indivtrain_ind
             res_dcbc['indivtrain_val'] = indivtrain_values
             res_dcbc['test_data'] = ds
-            # 2. Run coserr individual
-            # res_coserr = run_prederror(model_name, ds, 'all', cond_ind=None,
-            #                            part_ind='half', eval_types=['group', 'floor'],
-            #                            indivtrain_ind='half', indivtrain_values=[1,2],
-            #                            device='cuda')
-            # 3. Merge the two dataframe
-            # res = pd.merge(res_dcbc, res_coserr, how='outer')
             results = pd.concat([results, res_dcbc], ignore_index=True)
 
     # Save file
-    wdir = model_dir + f'/Models/Evaluation_01'
-    if test_ses is not None:
-        fname = f'/eval_all_asym_Ib_K-{K}_{test_ses}_on_otherDatasets.tsv'
+    wdir = model_dir + f'/Models/Evaluation'
+    if out_name is None:
+        fname = f'/eval_all_asym_K-{K}_on_otherDatasets.tsv'
     else:
-        fname = f'/eval_all_asym_Ib_K-10_to_100_indivSess_on_otherDatasets.tsv'
+        fname = f'/eval_all_asym_K-{K}_{out_name}_on_otherDatasets.tsv'
     results.to_csv(wdir + fname, index=False, sep='\t')
 
 def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
@@ -193,11 +177,21 @@ if __name__ == "__main__":
     # fit_rest_vs_task(datasets_list=[1,2,3,4,5,6,7], K=[10,17,20,34,40,68,100],
     #                  sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
 
+    ############# Evaluating models #############
+    model_name = []
+    K = [10,17,20,34,40,68,100]
+    for mt in ['03', '04']:
+        model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-{this_k}'
+                       for this_k in K]
+
+    result_6_eval(model_name, K='10to100', t_datasets=['Pontine','Nishimoto','IBC',
+                                                       'WMFS','Demand','Somatotopic'],
+                  out_name='MdSmoothed')
     ############# Plot fusion atlas #############
     # Making color map
-    fname = f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-10_hcpOdd'
-    colors = get_cmap(fname)
-
-    # plt.figure(figsize=(20, 10))
-    plot_model_parcel([fname], [1, 1], cmap=colors, align=True, device='cuda')
-    plt.show()
+    # fname = f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-10_hcpOdd'
+    # colors = get_cmap(fname)
+    #
+    # # plt.figure(figsize=(20, 10))
+    # plot_model_parcel([fname], [1, 1], cmap=colors, align=True, device='cuda')
+    # plt.show()

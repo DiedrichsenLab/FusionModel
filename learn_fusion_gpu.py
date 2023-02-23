@@ -559,7 +559,7 @@ if __name__ == "__main__":
     sym_type = ['asym']
     model_type = '03'
     space = 'MNISymC3'
-    datasets_list = [1, 2]
+    datasets_list = [1, 7]
 
     for k in [10, 20, 34, 40, 68, 100]:
         fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=model_type,
