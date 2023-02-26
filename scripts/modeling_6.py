@@ -29,11 +29,11 @@ import time
 import pickle
 from copy import copy,deepcopy
 from itertools import combinations
-import ProbabilisticParcellation.util as ut
-from ProbabilisticParcellation.evaluate import *
-import ProbabilisticParcellation.similarity_colormap as sc
-import ProbabilisticParcellation.hierarchical_clustering as cl
-from ProbabilisticParcellation.learn_fusion_gpu import *
+import FusionModel.util as ut
+from FusionModel.evaluate import *
+import FusionModel.similarity_colormap as sc
+import FusionModel.hierarchical_clustering as cl
+from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
 # pt.cuda.is_available = lambda : False
@@ -112,6 +112,10 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
         # part_vec = np.ones((tinfo.shape[0],), dtype=int)
         CV_setting = [('half', 1), ('half', 2)]
 
+        if ds == 'HCP': # even numbers for testing
+            hcp_test = np.arange(0, 100, 2)
+            tdata = tdata[hcp_test]
+
         ################ CV starts here ################
         for (indivtrain_ind, indivtrain_values) in CV_setting:
             # get train/test index for cross validation
@@ -132,9 +136,9 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
     # Save file
     wdir = model_dir + f'/Models/Evaluation'
     if out_name is None:
-        fname = f'/eval_all_asym_K-{K}_on_otherDatasets.tsv'
+        fname = f'/eval_all_asym_K-{K}_on_MdHcEven.tsv'
     else:
-        fname = f'/eval_all_asym_K-{K}_{out_name}_on_otherDatasets.tsv'
+        fname = f'/eval_all_asym_K-{K}_{out_name}_on_MdHcEven.tsv'
     results.to_csv(wdir + fname, index=False, sep='\t')
 
 def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
@@ -178,20 +182,30 @@ if __name__ == "__main__":
     #                  sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
 
     ############# Evaluating models #############
-    model_name = []
-    K = [10,17,20,34,40,68,100]
-    for mt in ['03', '04']:
-        model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-{this_k}'
-                       for this_k in K]
+    # model_type = ['03', '04']
+    # K = [10,17,20,34,40,68,100]
+    #
+    # model_name = []
+    # # Task+rest
+    # model_name += [f'Models_{mt}/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                for this_k in K for mt in model_type]
+    # # Pure Task
+    # model_name += [f'Models_{mt}/asym_PoNiIbWmDeSo_space-MNISymC3_K-{this_k}'
+    #                for this_k in K for mt in model_type]
+    # # Pure Rest
+    # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                for this_k in K for mt in model_type]
+    #
+    # result_6_eval(model_name, K='10to100', t_datasets=['MDTB','HCP'], out_name='6taskHcOdd')
 
-    result_6_eval(model_name, K='10to100', t_datasets=['Pontine','Nishimoto','IBC',
-                                                       'WMFS','Demand','Somatotopic'],
-                  out_name='MdSmoothed')
     ############# Plot fusion atlas #############
     # Making color map
-    # fname = f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-10_hcpOdd'
-    # colors = get_cmap(fname)
-    #
-    # # plt.figure(figsize=(20, 10))
-    # plot_model_parcel([fname], [1, 1], cmap=colors, align=True, device='cuda')
-    # plt.show()
+    K = 34
+    fname = [f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}',
+             f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-{K}_hcpOdd',
+             f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{K}_hcpOdd']
+    colors = get_cmap(f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}')
+
+    plt.figure(figsize=(20, 10))
+    plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
+    plt.show()
