@@ -175,37 +175,67 @@ def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
             with open(wdir + fname + '.pickle', 'wb') as file:
                 pickle.dump(models, file)
 
+def plot_result_6(D, t_data='MDTB'):
+    D = D.replace(["['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic' 'HCP']",
+                   "['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']",
+                   "['HCP']"], ['task+rest', 'task', 'rest'])
+    D = D.loc[D.test_data == t_data]
+
+    plt.figure(figsize=(10, 10))
+    crits = ['dcbc_group', 'dcbc_indiv']
+    for i, c in enumerate(crits):
+        plt.subplot(2, 2, i*2 + 1)
+        sb.barplot(data=D, x='model_type', y=c, hue='train_data', errorbar="se")
+
+        # if 'coserr' in c:
+        #     plt.ylim(0.4, 1)
+        plt.subplot(2, 2, i*2 + 2)
+        sb.lineplot(data=D, x='K', y=c, hue='train_data', style="model_type",
+                    errorbar='se', markers=False)
+
+    plt.suptitle(f'Task, rest, task+rest, test_data={t_data}')
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    # fit_rest_vs_task(datasets_list=[1,2,3,4,5,6,7], K=[10,17,20,34,40,68,100],
-    #                  sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
+    for i in range(1,7):
+        datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
+        datasets_list.remove(i)
+        print(datasets_list)
+        fit_rest_vs_task(datasets_list=[1,2,3,4,5,6,7], K=[10,17,20,34,40,68,100],
+                         sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
 
     ############# Evaluating models #############
-    # model_type = ['03', '04']
-    # K = [10,17,20,34,40,68,100]
-    #
-    # model_name = []
-    # # Task+rest
-    # model_name += [f'Models_{mt}/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{this_k}_hcpOdd'
-    #                for this_k in K for mt in model_type]
-    # # Pure Task
-    # model_name += [f'Models_{mt}/asym_PoNiIbWmDeSo_space-MNISymC3_K-{this_k}'
-    #                for this_k in K for mt in model_type]
-    # # Pure Rest
-    # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
-    #                for this_k in K for mt in model_type]
-    #
-    # result_6_eval(model_name, K='10to100', t_datasets=['MDTB','HCP'], out_name='6taskHcOdd')
+    model_type = ['03', '04']
+    K = [10,17,20,34,40,68,100]
+
+    model_name = []
+    # Task+rest
+    model_name += [f'Models_{mt}/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{this_k}_hcpOdd'
+                   for this_k in K for mt in model_type]
+    # Pure Task
+    model_name += [f'Models_{mt}/asym_PoNiIbWmDeSo_space-MNISymC3_K-{this_k}'
+                   for this_k in K for mt in model_type]
+    # Pure Rest
+    model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+                   for this_k in K for mt in model_type]
+
+    result_6_eval(model_name, K='10to100', t_datasets=['HCP'], out_name='6taskHcOdd')
+
+    ############# Plot evaluation #############
+    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_6taskHcOdd_on_MdHcEven.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # plot_result_6(D, t_data='HCP')
 
     ############# Plot fusion atlas #############
     # Making color map
-    K = 34
-    fname = [f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}',
-             f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-{K}_hcpOdd',
-             f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{K}_hcpOdd']
-    colors = get_cmap(f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}')
-
-    plt.figure(figsize=(20, 10))
-    plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
-    plt.show()
+    # K = 34
+    # fname = [f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}',
+    #          f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-{K}_hcpOdd',
+    #          f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{K}_hcpOdd']
+    # colors = get_cmap(f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}')
+    #
+    # plt.figure(figsize=(20, 10))
+    # plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
+    # plt.show()

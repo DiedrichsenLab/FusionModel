@@ -160,7 +160,7 @@ def plot_smooth_vs_unsmooth(D, model_type='Models_01'):
     crits = ['dcbc_group', 'dcbc_indiv']
     for i, c in enumerate(crits):
         plt.subplot(2, 2, i*2 + 1)
-        sb.barplot(data=D, x='model_type', y='dcbc_group', hue='smooth', errorbar="se")
+        sb.barplot(data=D, x='model_type', y=c, hue='smooth', errorbar="se")
 
         # if 'coserr' in c:
         #     plt.ylim(0.4, 1)
