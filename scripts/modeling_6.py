@@ -224,8 +224,8 @@ if __name__ == "__main__":
         datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
         datasets_list.remove(i)
         print(datasets_list)
-        fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
-                         sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
+        fit_rest_vs_task(datasets_list=datasets_list, K=[34,40],
+                         sym_type=['asym'], model_type=['04'], space='MNISymC3')
 
     ############# Evaluating models #############
     # model_type = ['03', '04']
