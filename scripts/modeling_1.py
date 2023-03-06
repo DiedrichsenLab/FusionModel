@@ -253,26 +253,26 @@ if __name__ == "__main__":
             model_type = f'Models_{t}'
             model_name = f'asym_Md_space-MNISymC3_K-{k}'
             fname = model_dir + f'/Results/1.indiv_vs_group/eval_{model_type}_{model_name}.tsv'
-            # D, Us = result_1_eval(model_type=model_type, model_name=model_name, infer_model='GMM',
-            #                       oname=fname)
+            D, Us = result_1_eval(model_type=model_type, model_name=model_name, infer_model='VMF',
+                                  oname=None)
 
     result_1_plot_curve(fname,crits=['dcbc'], oname=model_type + f'_{model_name}.pdf', save=True)
 
     ########## Making color map ##########
-    D1, Us1 = result_1_eval(model_type='Models_03', model_name='asym_Md_space-MNISymC3_K-17',
-                           infer_model='VMF', oname=None)
-    D2, Us2 = result_1_eval(model_type='Models_03', model_name='asym_Md_space-MNISymC3_K-17_GMM',
-                          infer_model='GMM', oname=None)
-
-    map_vmf = Us1[1][-1][0]
-    map_gmm = Us2[1][-1][0]
-    indx = ev.matching_greedy(map_vmf, map_gmm)
-    map_gmm = map_gmm[indx,:]
+    # D1, Us1 = result_1_eval(model_type='Models_03', model_name='asym_Md_space-MNISymC3_K-17',
+    #                        infer_model='VMF', oname=None)
+    # D2, Us2 = result_1_eval(model_type='Models_03', model_name='asym_Md_space-MNISymC3_K-17_GMM',
+    #                       infer_model='GMM', oname=None)
+    #
+    # map_vmf = Us1[1][-1][0]
+    # map_gmm = Us2[1][-1][0]
+    # indx = ev.matching_greedy(map_vmf, map_gmm)
+    # map_gmm = map_gmm[indx,:]
     colors = get_cmap('Models_03/asym_Md_space-MNISymC3_K-17')
     colors[12] = np.array([249 / 255, 178 / 255, 247 / 255, 1.])
 
-    plot_multi_flat(pt.stack((map_vmf, map_gmm)).cpu().numpy(), 'MNISymC3', grid=(1, 2),
-                    cmap=colors, dtype='prob', titles=['VMF','GMM'])
+    # plot_multi_flat(pt.stack((map_vmf, map_gmm)).cpu().numpy(), 'MNISymC3', grid=(1, 2),
+    #                 cmap=colors, dtype='prob', titles=['VMF','GMM'])
 
     result_1_plot_flatmap(Us, sub=0, cmap=colors, save_folder='/Models_03')
 

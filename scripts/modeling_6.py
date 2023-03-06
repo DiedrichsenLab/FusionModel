@@ -103,27 +103,25 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
     for ds in t_datasets:
         print(f'Testdata: {ds}\n')
         # Preparing atlas, cond_vec, part_vec
-        if ds == 'HCP':
-            this_type = 'Tseries'
+        if ds.startswith('HCP'):
+            ds = string.split("_")[0]
+            this_type = string.split("_")[1]
             subj = np.arange(0, 100, 2)
-            # tds = get_dataset_class(base_dir, 'HCP')
-            # data_cereb, info = tds.get_data(space=space, ses_id=ses_id,
-            #                                 type='Tseries', subj=[p])
-            tic = time.perf_counter()
-            tdata, tinfo, tds = get_dataset(base_dir, ds, atlas='MNISymC3',
-                                            sess='all', type=this_type, subj=subj)
-            toc = time.perf_counter()
-            print(f'Done loading. Used {toc - tic:0.4f} seconds!')
         else:
             this_type = T.loc[T.name == ds]['default_type'].item()
             subj = None
-            tic = time.perf_counter()
-            tdata, tinfo, tds = get_dataset(base_dir, ds, atlas='MNISymC3',
-                                            sess='all', type=this_type, subj=subj)
-            toc = time.perf_counter()
-            print(f'Done loading. Used {toc - tic:0.4f} seconds!')
 
-        cond_vec = tinfo['time_id'].values.reshape(-1, ) # default from dataset class
+        # Load testing data
+        tic = time.perf_counter()
+        tdata, tinfo, tds = get_dataset(base_dir, ds, atlas='MNISymC3',
+                                        sess='all', type=this_type, subj=subj)
+        toc = time.perf_counter()
+        print(f'Done loading. Used {toc - tic:0.4f} seconds!')
+
+        cond_vec = tinfo[tds.cond_ind].values.reshape(-1, )  # default from dataset class
+        if this_type == 'Tseries':
+            cond_vec = tinfo['time_id'].values.reshape(-1, )
+
         part_vec = tinfo['half'].values
         # part_vec = np.ones((tinfo.shape[0],), dtype=int)
         CV_setting = [('half', 1), ('half', 2)]
@@ -149,10 +147,10 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
     # Save file
     wdir = model_dir + f'/Models/Evaluation'
     if out_name is None:
-        fname = f'/eval_all_asym_K-{K}_on_MdHcEven.tsv'
+        return results
     else:
         fname = f'/eval_all_asym_K-{K}_{out_name}_on_MdHcEven.tsv'
-    results.to_csv(wdir + fname, index=False, sep='\t')
+        results.to_csv(wdir + fname, index=False, sep='\t')
 
 def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
                      model_type=['03','04'], space='MNISymC3'):
@@ -220,41 +218,47 @@ def plot_result_6(D, t_data='MDTB'):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    for i in range(1,7):
-        datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
-        datasets_list.remove(i)
-        print(datasets_list)
-        fit_rest_vs_task(datasets_list=datasets_list, K=[34,40],
-                         sym_type=['asym'], model_type=['04'], space='MNISymC3')
+    # for i in range(0,7):
+    #     datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
+    #     datasets_list.remove(i)
+    #     print(datasets_list)
+    #     fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
+    #                      sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
 
     ############# Evaluating models #############
-    # model_type = ['03', '04']
-    # K = [10,17,20,34,40,68,100]
-    #
-    # model_name = []
-    # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
-    # for i in range(0,1):
-    # # for i in range(1, 7):
-    #     datasets_list = [0, 1, 2, 3, 4, 5, 6]
-    #     datasets_list.remove(i)
-    #     dataname = ''.join(T.two_letter_code[datasets_list])
-    #     # Pure Task
-    #     model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
-    #                    for this_k in K for mt in model_type]
-    #     # Task+rest
-    #     model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
-    #                    for this_k in K for mt in model_type]
-    #
-    # # Pure Rest
-    # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
-    #                for this_k in K for mt in model_type]
-    #
-    # result_6_eval(model_name, K='10to100', t_datasets=['HCP'], out_name='6taskHcOdd')
-    #
-    # ############# Plot evaluation #############
-    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_6taskHcOdd_on_HcEven_ts.tsv'
-    # D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_result_6(D, t_data='HCP')
+    model_type = ['03', '04']
+    K = [10,17,20,34,40,68,100]
+
+    model_name = []
+    T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    results = pd.DataFrame()
+    for i in range(0, 7):
+        datasets_list = [0, 1, 2, 3, 4, 5, 6]
+        datasets_list.remove(i)
+        dataname = ''.join(T.two_letter_code[datasets_list])
+        # Pure Task
+        model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
+                       for this_k in K for mt in model_type]
+        # Task+rest
+        model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+                       for this_k in K for mt in model_type]
+
+        # Pure Rest
+        model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+                       for this_k in K for mt in model_type]
+
+        res = result_6_eval(model_name, K='10to100', t_datasets=[T.name[i]], out_name=None)
+        results = pd.concat([results, res], ignore_index=True)
+
+    # Save file
+    wdir = model_dir + f'/Models/Evaluation'
+    results.to_csv(wdir + '/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv', index=False,
+                   sep='\t')
+
+    ############# Plot evaluation #############
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_6taskHcOdd_on_HcEven_ts.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+    plot_result_6(D, t_data='HCP')
 
     ############# Plot fusion atlas #############
     # Making color map
