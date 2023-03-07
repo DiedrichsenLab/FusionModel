@@ -32,6 +32,7 @@ from copy import copy,deepcopy
 from itertools import combinations
 from ProbabilisticParcellation.util import *
 from ProbabilisticParcellation.evaluate import *
+from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
 # pt.cuda.is_available = lambda : False
@@ -58,6 +59,16 @@ if not Path(base_dir).exists():
 
 atlas_dir = base_dir + f'/Atlases'
 res_dir = model_dir + f'/Results'
+
+def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03', datasets_list=[0]):
+    for k in K:
+        for s in smooth:
+            fit_param = {'fit_arr': False, 'fit_emi': True,
+                         'init_arr': False, 'init_emi': True, 'smooth': s}
+            print(fit_param)
+            fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=model_type,
+                    sym_type=['asym'], space='MNISymC3', **fit_param)
+
 
 def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                   out_name=None):
@@ -198,6 +209,10 @@ def make_all_in_one_tsv(path, out_name):
         D.to_csv(out_name, sep='\t', index=False)
 
 if __name__ == "__main__":
+    ############# Fitting models #############
+    fit_smooth(model_type='03')
+    fit_smooth(model_type='04')
+
     ############# Evaluating models #############
     # model_name = []
     # K = [10,17,20,34,40,68,100]
@@ -210,12 +225,12 @@ if __name__ == "__main__":
     #               out_name='MdUnSmoothed')
 
     ############# Plotting comparison #############
-    fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
-    fname2 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdSmoothed_on_otherDatasets.tsv'
-    D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
-    D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
-
-    D1['smooth'] = 2
-    D2['smooth'] = 7
-    D = pd.concat([D1, D2], ignore_index=True)
-    plot_smooth_vs_unsmooth(D)
+    # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
+    # fname2 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdSmoothed_on_otherDatasets.tsv'
+    # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
+    # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
+    #
+    # D1['smooth'] = 2
+    # D2['smooth'] = 7
+    # D = pd.concat([D1, D2], ignore_index=True)
+    # plot_smooth_vs_unsmooth(D)
