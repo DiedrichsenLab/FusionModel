@@ -100,12 +100,12 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     results = pd.DataFrame()
     # Evaluate all single sessions on other datasets
-    for ds in t_datasets:
-        print(f'Testdata: {ds}\n')
+    for i, this_ds in enumerate(t_datasets):
+        print(f'Testdata: {this_ds}\n')
         # Preparing atlas, cond_vec, part_vec
-        if ds.startswith('HCP'):
-            ds = string.split("_")[0]
-            this_type = string.split("_")[1]
+        if this_ds.startswith('HCP'):
+            ds = this_ds.split("_")[0]
+            this_type = this_ds.split("_")[1]
             subj = np.arange(0, 100, 2)
         else:
             this_type = T.loc[T.name == ds]['default_type'].item()
@@ -118,9 +118,11 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
         toc = time.perf_counter()
         print(f'Done loading. Used {toc - tic:0.4f} seconds!')
 
-        cond_vec = tinfo[tds.cond_ind].values.reshape(-1, )  # default from dataset class
         if this_type == 'Tseries':
             cond_vec = tinfo['time_id'].values.reshape(-1, )
+        else:
+            # default from dataset class
+            cond_vec = tinfo[tds.cond_ind].values.reshape(-1, )
 
         part_vec = tinfo['half'].values
         # part_vec = np.ones((tinfo.shape[0],), dtype=int)
@@ -141,7 +143,7 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                                device='cuda')
             res_dcbc['indivtrain_ind'] = indivtrain_ind
             res_dcbc['indivtrain_val'] = indivtrain_values
-            res_dcbc['test_data'] = ds
+            res_dcbc['test_data'] = t_datasets[i]
             results = pd.concat([results, res_dcbc], ignore_index=True)
 
     # Save file
@@ -149,7 +151,7 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
     if out_name is None:
         return results
     else:
-        fname = f'/eval_all_asym_K-{K}_{out_name}_on_MdHcEven.tsv'
+        fname = f'/eval_all_asym_K-{K}_{out_name}_on_HcEven.tsv'
         results.to_csv(wdir + fname, index=False, sep='\t')
 
 def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
@@ -179,7 +181,7 @@ def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
             writein_dir = ut.model_dir + f'/Models/Models_{t}/leaveNout'
             dataname = ''.join(T.two_letter_code[datasets_list])
             nam = f'/asym_{dataname}_space-MNISymC3_K-{k}_hcpOdd'
-            if not Path(writein_dir + nam + '.tsv').exists():
+            if Path(writein_dir + nam + '.tsv').exists():
                 wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
                                                     repeats=100, model_type=t,
                                                     sym_type=sym_type,
@@ -216,49 +218,149 @@ def plot_result_6(D, t_data='MDTB'):
     plt.tight_layout()
     plt.show()
 
-if __name__ == "__main__":
-    ############# Fitting models #############
-    # for i in range(0,7):
-    #     datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
-    #     datasets_list.remove(i)
-    #     print(datasets_list)
-    #     fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
-    #                      sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
-
-    ############# Evaluating models #############
-    model_type = ['03', '04']
-    K = [10,17,20,34,40,68,100]
-
-    model_name = []
+def plot_loo_task(D, t_data=['MDTB'], model_type='03'):
+    num_td = len(t_data)
+    D = D.loc[D.model_type == f'Models_{model_type}']
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
-    results = pd.DataFrame()
-    for i in range(0, 7):
+
+    new_D = pd.DataFrame()
+    plt.figure(figsize=(5*num_td, 10))
+    for i in t_data:
+        this_D = D.loc[D.test_data == T.name[i]]
+
+        # Replace training dataset name to task, rest, task+rest
         datasets_list = [0, 1, 2, 3, 4, 5, 6]
         datasets_list.remove(i)
-        dataname = ''.join(T.two_letter_code[datasets_list])
-        # Pure Task
-        model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
-                       for this_k in K for mt in model_type]
-        # Task+rest
-        model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
-                       for this_k in K for mt in model_type]
+        tasks_name = T.name.to_numpy()[datasets_list]
+        all_name = T.name.to_numpy()[datasets_list+[7]]
+        rest_name = T.name.to_numpy()[[7]]
 
-        # Pure Rest
-        model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
-                       for this_k in K for mt in model_type]
+        strings = this_D.train_data.unique()
+        for st in strings:
+            if 'PandasArray' in st:
+                this_D = this_D.replace([st], [str(tasks_name)])
 
-        res = result_6_eval(model_name, K='10to100', t_datasets=[T.name[i]], out_name=None)
-        results = pd.concat([results, res], ignore_index=True)
+        this_D = this_D.replace([str(all_name), str(tasks_name), str(rest_name)],
+                                ['task+rest', 'task', 'rest'])
 
-    # Save file
-    wdir = model_dir + f'/Models/Evaluation'
-    results.to_csv(wdir + '/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv', index=False,
-                   sep='\t')
+
+        plt.subplot(2, num_td, i+1)
+        sb.lineplot(data=this_D, x='K', y='dcbc_group', hue='train_data',
+                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
+        plt.title(T.name[i])
+
+        plt.subplot(2, num_td, i+num_td+1)
+        sb.lineplot(data=this_D, x='K', y='dcbc_indiv', hue='train_data',
+                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
+        plt.title(T.name[i])
+
+        new_D = pd.concat([new_D, this_D], ignore_index=True)
+
+    plt.suptitle(f'Model {model_type}: Task, rest, task+rest, test_data=Tasks')
+    plt.tight_layout()
+    plt.show()
+
+def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
+    num_td = len(t_data)
+    D = D.loc[D.model_type == f'Models_{model_type}']
+    T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+
+    D = D.replace(["['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic' 'HCP']",
+                   "['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']",
+                   "['HCP']"], ['task+rest', 'task', 'rest'])
+
+    plt.figure(figsize=(10*num_td, 20))
+    for i, td in enumerate(t_data):
+        this_D = D.loc[D.test_data == td]
+
+        plt.subplot(2, num_td, i+1)
+        sb.lineplot(data=this_D, x='K', y='dcbc_group', hue='train_data',
+                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
+        plt.title(td)
+
+        plt.subplot(2, num_td, i+num_td+1)
+        sb.lineplot(data=this_D, x='K', y='dcbc_indiv', hue='train_data',
+                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
+        plt.title(td)
+
+    plt.suptitle(f'Model {model_type}: Task, rest, task+rest, test_data=rest')
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    ############# Fitting models #############
+    for i in range(0,7):
+        datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
+        datasets_list.remove(i)
+        print(datasets_list)
+        fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
+                         sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
+
+    ############# Evaluating models (on task) #############
+    # model_type = ['03', '04']
+    # K = [10,17,20,34,40,68,100]
+    #
+    # model_name = []
+    # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    # results = pd.DataFrame()
+    # for i in range(0, 7):
+    #     datasets_list = [0, 1, 2, 3, 4, 5, 6]
+    #     datasets_list.remove(i)
+    #     dataname = ''.join(T.two_letter_code[datasets_list])
+    #     # Pure Task
+    #     model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
+    #                    for this_k in K for mt in model_type]
+    #     # Task+rest
+    #     model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                    for this_k in K for mt in model_type]
+    #
+    #     # Pure Rest
+    #     model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                    for this_k in K for mt in model_type]
+    #
+    #     res = result_6_eval(model_name, K='10to100', t_datasets=[T.name[i]], out_name=None)
+    #     results = pd.concat([results, res], ignore_index=True)
+    #
+    # # Save file
+    # wdir = model_dir + f'/Models/Evaluation'
+    # results.to_csv(wdir + '/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv', index=False,
+    #                sep='\t')
+
+    ############# Evaluating models (on rest) #############
+    # model_type = ['03', '04']
+    # K = [10, 17, 20, 34, 40, 68, 100]
+    #
+    # model_name = []
+    # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    # datasets_list = [0, 1, 2, 3, 4, 5, 6]
+    #
+    # dataname = ''.join(T.two_letter_code[datasets_list])
+    # # Pure Task
+    # model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
+    #                for this_k in K for mt in model_type]
+    # # Task+rest
+    # model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                for this_k in K for mt in model_type]
+    #
+    # # Pure Rest
+    # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                for this_k in K for mt in model_type]
+    #
+    # result_6_eval(model_name, K='10to100', t_datasets=['HCP_Ico162Run','HCP_Net69Run'],
+    #               out_name='7taskHcOdd')
 
     ############# Plot evaluation #############
-    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_6taskHcOdd_on_HcEven_ts.tsv'
+    # 1. evaluation on Task
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_result_6(D, t_data='HCP')
+    # plot_result_6(D, t_data='HCP')
+    plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
+
+    # 2. evaluation on rest
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+    plot_loo_rest(D, model_type='03')
+
 
     ############# Plot fusion atlas #############
     # Making color map

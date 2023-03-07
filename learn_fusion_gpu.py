@@ -34,7 +34,7 @@ def build_data_list(datasets,
                     part_ind=None,
                     subj=None,
                     join_sess=True,
-                    join_sess_part=False):
+                    join_sess_part=False, smooth=None):
     """Builds list of datasets, cond_vec, part_vec, subj_ind
     from different data sets
     Args:
@@ -73,7 +73,7 @@ def build_data_list(datasets,
         dat, info, ds = get_dataset(ut.base_dir, datasets[i],
                                     atlas=atlas,
                                     sess=sess[i],
-                                    type=type[i])
+                                    type=type[i], smooth=smooth)
         # Sub-index the subjects:
         if subj is not None:
             dat = dat[subj[i], :, :]
@@ -171,7 +171,8 @@ def batch_fit(datasets, sess,
               uniform_kappa=True,
               join_sess=True,
               join_sess_part=False,
-              weighting=None):
+              weighting=None,
+              smooth=None):
     """ Executes a set of fits starting from random starting values
     selects the best one from a batch and saves them
 
@@ -205,7 +206,8 @@ def batch_fit(datasets, sess,
                                                          part_ind=part_ind,
                                                          subj=subj,
                                                          join_sess=join_sess,
-                                                         join_sess_part=join_sess_part)
+                                                         join_sess_part=join_sess_part,
+                                                         smooth=smooth)
     toc = time.perf_counter()
     print(f'Done loading. Used {toc - tic:0.4f} seconds!')
 
@@ -249,7 +251,10 @@ def batch_fit(datasets, sess,
         m, ll, theta, U_hat, ll_init = m.fit_em_ninits(
             iter=n_iter,
             tol=0.01,
-            fit_arrangement=True,
+            fit_arrangement=False,
+            fit_emission=True,
+            init_arrangement=False,
+            init_emission=True,
             n_inits=n_inits,
             first_iter=first_iter, verbose=False)
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
@@ -293,7 +298,8 @@ def batch_fit(datasets, sess,
 
 
 def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
-            sym_type=['asym', 'sym'], subj_list=None, weighting=None, this_sess=None, space=None):
+            sym_type=['asym', 'sym'], subj_list=None, weighting=None,
+            this_sess=None, space=None, smooth=None):
     # Get dataset info
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     datasets = T.name.to_numpy()
@@ -364,7 +370,8 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  join_sess=join_sess,
                                  join_sess_part=join_sess_part,
                                  uniform_kappa=uniform_kappa,
-                                 weighting=weighting)
+                                 weighting=weighting,
+                                 smooth=smooth)
 
         # Save the fits and information
         wdir = ut.model_dir + f'/Models/Models_{model_type}'

@@ -60,15 +60,27 @@ if not Path(base_dir).exists():
 atlas_dir = base_dir + f'/Atlases'
 res_dir = model_dir + f'/Results'
 
-def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03', datasets_list=[0]):
-    for k in K:
-        for s in smooth:
-            fit_param = {'fit_arr': False, 'fit_emi': True,
-                         'init_arr': False, 'init_emi': True, 'smooth': s}
-            print(fit_param)
-            fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=model_type,
-                    sym_type=['asym'], space='MNISymC3', **fit_param)
+def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
+               datasets_list=[0]):
+    datasets = np.array(['MDTB', 'Pontine', 'Nishimoto', 'IBC', 'WMFS',
+                         'Demand', 'Somatotopic', 'HCP'], dtype=object)
+    _, _, my_dataset = get_dataset(ut.base_dir, 'MDTB')
+    sess = my_dataset.sessions
+    for indv_sess in sess:
+        for k in K:
+            for s in smooth:
+                wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
+                                                    repeats=100,
+                                                    model_type=model_type,
+                                                    sym_type=['asym'],
+                                                    this_sess=[[indv_sess]],
+                                                    space='MNISymC3', smooth=s)
 
+                wdir = wdir + '/smooth'
+                fname = fname + f'_smooth-{s}_{indv_sess}'
+                info.to_csv(wdir + fname + '.tsv', sep='\t')
+                with open(wdir + fname + '.pickle', 'wb') as file:
+                    pickle.dump(models, file)
 
 def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                   out_name=None):
