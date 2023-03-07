@@ -300,10 +300,10 @@ if __name__ == "__main__":
     # model_type = ['03', '04']
     # K = [10,17,20,34,40,68,100]
     #
-    # model_name = []
     # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     # results = pd.DataFrame()
     # for i in range(0, 7):
+    #     model_name = []
     #     datasets_list = [0, 1, 2, 3, 4, 5, 6]
     #     datasets_list.remove(i)
     #     dataname = ''.join(T.two_letter_code[datasets_list])
