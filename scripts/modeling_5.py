@@ -336,22 +336,22 @@ if __name__ == "__main__":
     # D.to_csv(wdir + fname, index=False, sep='\t')
 
     ############# Plot results #############
-    fname = f'/Models/Evaluation/eval_dataset7_asym.tsv'
-    # result_5_plot(fname, model_type='Models_03')
-    result_5_benchmark(fname, benchmark='MDTB', save=False)
-    plot_diffK_benchmark(fname, save=True)
+    # fname = f'/Models/Evaluation/eval_dataset7_asym.tsv'
+    # # result_5_plot(fname, model_type='Models_03')
+    # result_5_benchmark(fname, benchmark='MDTB', save=False)
+    # plot_diffK_benchmark(fname, save=True)
 
     ############# Plot fusion atlas #############
-    # indiv_dataset = ['Po', 'Ni', 'Ib', 'Wm', 'De', 'So']
-    # m_fusion = ''.join(indiv_dataset)
-    # datasets = [m_fusion] + indiv_dataset
-    # # Making color map
-    # colors = get_cmap(f'Models_03/asym_{m_fusion}_space-MNISymC3_K-34')
-    # model_names = [f'Models_03/asym_{s}_space-MNISymC3_K-34' for s in datasets]
-    #
-    # # plt.figure(figsize=(20, 10))
-    # plot_model_parcel(model_names, [2, 4], cmap=colors, align=True, device='cuda')
-    # plt.show()
+    indiv_dataset = ['Po', 'Ni', 'Ib', 'Wm', 'De', 'So']
+    m_fusion = ''.join(indiv_dataset)
+    datasets = [m_fusion] + indiv_dataset
+    # Making color map
+    colors = get_cmap(f'Models_04/asym_{m_fusion}_space-MNISymC3_K-34')
+    model_names = [f'Models_04/asym_{s}_space-MNISymC3_K-34' for s in datasets]
+
+    # plt.figure(figsize=(20, 10))
+    plot_model_parcel(model_names, [2, 4], cmap=colors, align=True, device='cuda')
+    plt.show()
 
     ############# GMM vs. vMF #############
     # m_name = ['Models_03/asym_Md_space-MNISymC3_K-10',

@@ -358,7 +358,7 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
     return results
 
 
-def run_dcbc(model_names, tdata, atlas, train_indx, test_indx, cond_vec,
+def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
              part_vec, device=None, load_best=True, verbose=True):
     """ Calculates DCBC using a test_data set. The test data splitted into
         individual training and test set given by `train_indx` and `test_indx`.
@@ -389,13 +389,15 @@ def run_dcbc(model_names, tdata, atlas, train_indx, test_indx, cond_vec,
     # Calculate distance metric given by input atlas
     dist = compute_dist(atlas.world.T, resolution=1)
     # convert tdata to tensor
-    if type(tdata) is np.ndarray:
-        tdata = pt.tensor(tdata, dtype=pt.get_default_dtype())
+    if type(train_data) is np.ndarray:
+        train_data = pt.tensor(train_data, dtype=pt.get_default_dtype())
+    if type(test_data) is np.ndarray:
+        test_data = pt.tensor(test_data, dtype=pt.get_default_dtype())
 
     if not isinstance(model_names, list):
         model_names = [model_names]
 
-    num_subj = tdata.shape[0]
+    num_subj = test_data.shape[0]
     results = pd.DataFrame()
     # Now loop over possible models we want to evaluate
     for i, model_name in enumerate(model_names):
@@ -415,10 +417,10 @@ def run_dcbc(model_names, tdata, atlas, train_indx, test_indx, cond_vec,
         # and get a Uhat (individual parcellation) from it.
         indivtrain_em = em.MixVMF(K=minfo.K, N=40,
                                   P=model.emissions[0].P,
-                                  X=matrix.indicator(cond_vec[train_indx]),
-                                  part_vec=part_vec[train_indx],
+                                  X=matrix.indicator(cond_vec),
+                                  part_vec=part_vec,
                                   uniform_kappa=model.emissions[0].uniform_kappa)
-        indivtrain_em.initialize(tdata[:, train_indx, :])
+        indivtrain_em.initialize(train_data)
         model.emissions = [indivtrain_em]
         model.initialize()
         # Gets us the individual parcellation
@@ -432,8 +434,8 @@ def run_dcbc(model_names, tdata, atlas, train_indx, test_indx, cond_vec,
         # Now run the DCBC evaluation fo the group and individuals
         Pgroup = pt.argmax(Prop, dim=0) + 1
         Pindiv = pt.argmax(U_indiv, dim=1) + 1
-        dcbc_group = calc_test_dcbc(Pgroup, tdata[:, test_indx, :], dist)
-        dcbc_indiv = calc_test_dcbc(Pindiv, tdata[:, test_indx, :], dist)
+        dcbc_group = calc_test_dcbc(Pgroup, test_data, dist)
+        dcbc_indiv = calc_test_dcbc(Pindiv, test_data, dist)
 
         # ------------------------------------------
         # Collect the information from the evaluation

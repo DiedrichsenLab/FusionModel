@@ -251,9 +251,9 @@ def batch_fit(datasets, sess,
         m, ll, theta, U_hat, ll_init = m.fit_em_ninits(
             iter=n_iter,
             tol=0.01,
-            fit_arrangement=False,
+            fit_arrangement=True,
             fit_emission=True,
-            init_arrangement=False,
+            init_arrangement=True,
             init_emission=True,
             n_inits=n_inits,
             first_iter=first_iter, verbose=False)

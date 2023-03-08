@@ -224,15 +224,15 @@ def plot_loo_task(D, t_data=['MDTB'], model_type='03'):
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
 
     new_D = pd.DataFrame()
-    plt.figure(figsize=(5*num_td, 10))
-    for i in t_data:
+    fig, axes = plt.subplots(nrows=2, ncols=num_td, figsize=(5 * num_td, 10), sharey='row')
+    for i in range(num_td):
         this_D = D.loc[D.test_data == T.name[i]]
 
         # Replace training dataset name to task, rest, task+rest
         datasets_list = [0, 1, 2, 3, 4, 5, 6]
         datasets_list.remove(i)
         tasks_name = T.name.to_numpy()[datasets_list]
-        all_name = T.name.to_numpy()[datasets_list+[7]]
+        all_name = T.name.to_numpy()[datasets_list + [7]]
         rest_name = T.name.to_numpy()[[7]]
 
         strings = this_D.train_data.unique()
@@ -243,19 +243,22 @@ def plot_loo_task(D, t_data=['MDTB'], model_type='03'):
         this_D = this_D.replace([str(all_name), str(tasks_name), str(rest_name)],
                                 ['task+rest', 'task', 'rest'])
 
+        # Set y-axis limits
+        # y_max = max(this_D[['dcbc_group', 'dcbc_indiv']].max())
+        # y_min = min(this_D[['dcbc_group', 'dcbc_indiv']].min())
 
-        plt.subplot(2, num_td, i+1)
-        sb.lineplot(data=this_D, x='K', y='dcbc_group', hue='train_data',
+        # Create line plot for group and individual DCBC scores
+        sb.lineplot(ax=axes[0, i], data=this_D, x='K', y='dcbc_group', hue='train_data',
                     hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
-        plt.title(T.name[i])
+        axes[0, i].set_title(T.name[i])
+        # axes[0, i].set_ylim(y_min, y_max)
 
-        plt.subplot(2, num_td, i+num_td+1)
-        sb.lineplot(data=this_D, x='K', y='dcbc_indiv', hue='train_data',
+        sb.lineplot(ax=axes[1, i], data=this_D, x='K', y='dcbc_indiv', hue='train_data',
                     hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
-        plt.title(T.name[i])
+        axes[1, i].set_title(T.name[i])
+        # axes[1, i].set_ylim(y_min, y_max)
 
-        new_D = pd.concat([new_D, this_D], ignore_index=True)
-
+    new_D = pd.concat([new_D, this_D], ignore_index=True)
     plt.suptitle(f'Model {model_type}: Task, rest, task+rest, test_data=Tasks')
     plt.tight_layout()
     plt.show()
@@ -289,12 +292,12 @@ def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    for i in range(0,7):
-        datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
-        datasets_list.remove(i)
-        print(datasets_list)
-        fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
-                         sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
+    # for i in range(0,7):
+    #     datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
+    #     datasets_list.remove(i)
+    #     print(datasets_list)
+    #     fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
+    #                      sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
 
     ############# Evaluating models (on task) #############
     # model_type = ['03', '04']

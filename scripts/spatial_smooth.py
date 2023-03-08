@@ -30,8 +30,8 @@ import time
 import pickle
 from copy import copy,deepcopy
 from itertools import combinations
-from ProbabilisticParcellation.util import *
-from ProbabilisticParcellation.evaluate import *
+from FusionModel.util import *
+from FusionModel.evaluate import *
 from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
@@ -70,20 +70,21 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
         for k in K:
             for s in smooth:
                 wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
-                                                    repeats=100,
+                                                    repeats=2,
                                                     model_type=model_type,
                                                     sym_type=['asym'],
                                                     this_sess=[[indv_sess]],
                                                     space='MNISymC3', smooth=s)
 
-                wdir = wdir + '/smooth'
-                fname = fname + f'_smooth-{s}_{indv_sess}'
+                # wdir = wdir + '/smoothed'
+                # fname = fname + f'_smooth-{s}_{indv_sess}'
+                fname = fname + f'_{indv_sess}'
                 info.to_csv(wdir + fname + '.tsv', sep='\t')
                 with open(wdir + fname + '.pickle', 'wb') as file:
                     pickle.dump(models, file)
 
-def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
-                  out_name=None):
+def eval_smoothed(model_name, t_datasets=['MDTB','Pontine','Nishimoto'],
+                  train_ses='ses-s1', test_ses='ses-s2', train_smooth=None):
     """Evaluate group and individual DCBC and coserr of IBC single
        sessions on all other test datasets.
     Args:
@@ -95,44 +96,32 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
         model_name = [model_name]
 
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
     results = pd.DataFrame()
     # Evaluate all single sessions on other datasets
     for ds in t_datasets:
         print(f'Testdata: {ds}\n')
         # Preparing atlas, cond_vec, part_vec
         this_type = T.loc[T.name == ds]['default_type'].item()
-        atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
-        tdata, tinfo, tds = get_dataset(base_dir, ds, atlas='MNISymC3',
-                                        sess='all', type=this_type)
-        cond_vec = tinfo[tds.cond_ind].values.reshape(-1, ) # default from dataset class
-        part_vec = tinfo['half'].values
-        # part_vec = np.ones((tinfo.shape[0],), dtype=int)
-        CV_setting = [('half', 1), ('half', 2)]
+        train_dat, train_inf, train_tds = get_dataset(base_dir, ds, atlas='MNISymC3',
+                                                      sess=[train_ses], type=this_type,
+                                                      smooth=None if train_smooth==2 else train_smooth)
+        test_dat, _, _ = get_dataset(base_dir, ds, atlas='MNISymC3',
+                                     sess=[test_ses], type=this_type)
 
-        ################ CV starts here ################
-        for (indivtrain_ind, indivtrain_values) in CV_setting:
-            # get train/test index for cross validation
-            train_indx = tinfo[indivtrain_ind] == indivtrain_values
-            test_indx = tinfo[indivtrain_ind] != indivtrain_values
-            # 1. Run DCBC individual
-            res_dcbc = run_dcbc(model_name, tdata, atlas,
-                               train_indx=train_indx,
-                               test_indx=test_indx,
-                               cond_vec=cond_vec,
-                               part_vec=part_vec,
-                               device='cuda')
-            res_dcbc['indivtrain_ind'] = indivtrain_ind
-            res_dcbc['indivtrain_val'] = indivtrain_values
-            res_dcbc['test_data'] = ds
-            results = pd.concat([results, res_dcbc], ignore_index=True)
+        cond_vec = train_inf[train_tds.cond_ind].values.reshape(-1, ) # default from dataset class
+        part_vec = train_inf['half'].values
 
-    # Save file
-    wdir = model_dir + f'/Models/Evaluation'
-    if out_name is None:
-        fname = f'/eval_all_asym_K-{K}_on_otherDatasets.tsv'
-    else:
-        fname = f'/eval_all_asym_K-{K}_{out_name}_on_otherDatasets.tsv'
-    results.to_csv(wdir + fname, index=False, sep='\t')
+        # 1. Run DCBC individual
+        res_dcbc = run_dcbc(model_name, train_dat, test_dat, atlas,
+                            cond_vec, part_vec, device='cuda')
+        res_dcbc['test_data'] = ds
+        res_dcbc['train_ses'] = train_ses
+        res_dcbc['test_ses'] = test_ses
+        res_dcbc['smooth'] = train_smooth
+        results = pd.concat([results, res_dcbc], ignore_index=True)
+
+    return results
 
 def result_1_plot_curve(fname, crits=['coserr', 'dcbc'], oname=None, save=False):
     D = pd.read_csv(fname, delimiter='\t')
@@ -222,19 +211,36 @@ def make_all_in_one_tsv(path, out_name):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    fit_smooth(model_type='03')
-    fit_smooth(model_type='04')
+    # fit_smooth(model_type='03')
+    fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
     # model_name = []
     # K = [10,17,20,34,40,68,100]
-    # for mt in ['03', '04']:
-    #     model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}'
-    #                    for this_k in K]
+    # model_type = ['03']
+    # smooth = [0,2,3,7]
+    # CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
+    # D = pd.DataFrame()
     #
-    # result_6_eval(model_name, K='10to100', t_datasets=['Pontine','Nishimoto','IBC',
-    #                                                    'WMFS','Demand','Somatotopic'],
-    #               out_name='MdUnSmoothed')
+    # for (train_ses, test_ses) in CV_setting:
+    #     for s in smooth:
+    #         for mt in model_type:
+    #             if s != 2:
+    #                 model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
+    #                                f'{this_k}_smooth-{s}_{train_ses}'
+    #                                for this_k in K]
+    #             else:
+    #                 model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
+    #                                for this_k in K]
+    #
+    #         results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
+    #                                 test_ses=test_ses, train_smooth=s)
+    #         D = pd.concat([D, results], ignore_index=True)
+    #
+    # # Save file
+    # wdir = model_dir + f'/Models/Evaluation'
+    # fname = f'/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
+    # D.to_csv(wdir + fname, index=False, sep='\t')
 
     ############# Plotting comparison #############
     # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
