@@ -3,6 +3,7 @@ import nibabel as nb
 import SUITPy as suit
 import pickle
 import Functional_Fusion.atlas_map as am
+import Functional_Fusion.dataset as dt
 import pandas as pd
 import torch as pt
 import json
@@ -394,8 +395,6 @@ def _compute_var_cov(data, cond='all', mean_centering=True):
     """
     if mean_centering:
         data = data - pt.mean(data, dim=1, keepdim=True)  # mean centering
-    else:
-        data = data
 
     # specify the condition index used to compute correlation, otherwise use all conditions
     if cond != 'all':
@@ -408,7 +407,8 @@ def _compute_var_cov(data, cond='all', mean_centering=True):
 
     k = data.shape[1]
     cov = pt.matmul(data, data.T) / (k - 1)
-    sd = data.std(dim=1).reshape(-1, 1)  # standard deviation
+    # sd = data.std(dim=1).reshape(-1, 1)  # standard deviation
+    sd = pt.sqrt(pt.sum(data ** 2, dim=1, keepdim=True) / (k - 1))
     var = pt.matmul(sd, sd.T)
 
     return cov, var
@@ -508,3 +508,34 @@ def compute_DCBC(maxDist=35, binWidth=1, parcellation=np.empty([]),
     }
 
     return D
+
+def similarity_between_datasets(base_dir, dataset_name, atlas='MNISymC3',
+                                subtract_mean=True, voxel_wise=True):
+    """Calculates the average within subject reliability
+    maps across sessions for a single data
+
+    Args:
+        base_dir (str / path): Base directory
+        dataset_name (str): Name of data set
+        atlas (str): _description_. Defaults to 'MNISymC3'.
+        subtract_mean (bool): Remove the mean per voxel before correlation calc?
+
+    Returns:
+        _type_: _description_
+    """
+    n_datasets = len(dataset_name)
+    # n_vox = data.shape[2]
+    # Rel = np.zeros((n_datasets, n_vox))
+    Rel = []
+    for i, ds in enumerate(dataset_name):
+        data, _, _ = dt.get_dataset(base_dir, ds, atlas=atlas)
+        # r = reliability_within_subj(data[:, indx, :],
+        #                             part_vec=info[dataset.part_ind][indx],
+        #                             cond_vec=info[dataset.cond_ind][indx],
+        #                             voxel_wise=voxel_wise,
+        #                             subtract_mean=subtract_mean)
+        r = dt.reliability_between_subj(data, cond_vec=None,
+                                        voxel_wise=voxel_wise,
+                                        subtract_mean=subtract_mean)
+        Rel.append(np.nanmean(r, axis=0))
+    return np.stack(Rel)

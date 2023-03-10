@@ -127,11 +127,9 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
     Returns:
         dcbc_values (np.ndarray): the DCBC values of subjects
     """
-
-    #
-    # if trim_nan:  # mask the nan voxel pairs distance to nan
-    #     dist[np.where(np.isnan(parcels))[0], :] = np.nan
-    #     dist[:, np.where(np.isnan(parcels))[0]] = np.nan
+    if trim_nan:  # mask the nan voxel pairs distance to nan
+        dist[pt.where(pt.isnan(parcels))[0], :] = pt.nan
+        dist[:, pt.where(pt.isnan(parcels))[0]] = pt.nan
 
     dcbc_values = []
     for sub in range(testdata.shape[0]):

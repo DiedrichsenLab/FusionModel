@@ -70,7 +70,7 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
         for k in K:
             for s in smooth:
                 wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
-                                                    repeats=2,
+                                                    repeats=100,
                                                     model_type=model_type,
                                                     sym_type=['asym'],
                                                     this_sess=[[indv_sess]],
@@ -212,12 +212,12 @@ def make_all_in_one_tsv(path, out_name):
 if __name__ == "__main__":
     ############# Fitting models #############
     # fit_smooth(model_type='03')
-    fit_smooth(smooth=[None], model_type='04')
+    # fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
     # model_name = []
     # K = [10,17,20,34,40,68,100]
-    # model_type = ['03']
+    # model_type = ['04']
     # smooth = [0,2,3,7]
     # CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
     # D = pd.DataFrame()
@@ -245,10 +245,12 @@ if __name__ == "__main__":
     ############# Plotting comparison #############
     # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
     # fname2 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdSmoothed_on_otherDatasets.tsv'
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
     # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
     # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
     #
     # D1['smooth'] = 2
     # D2['smooth'] = 7
     # D = pd.concat([D1, D2], ignore_index=True)
-    # plot_smooth_vs_unsmooth(D)
+    plot_smooth_vs_unsmooth(D)

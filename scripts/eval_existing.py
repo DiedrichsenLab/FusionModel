@@ -29,10 +29,10 @@ import pickle
 import json
 from copy import copy,deepcopy
 from itertools import combinations
-from ProbabilisticParcellation.util import *
-from ProbabilisticParcellation.evaluate import *
-import ProbabilisticParcellation.similarity_colormap as sc
-import ProbabilisticParcellation.hierarchical_clustering as cl
+from FusionModel.util import *
+from FusionModel.evaluate import *
+import FusionModel.similarity_colormap as sc
+import FusionModel.hierarchical_clustering as cl
 
 # pytorch cuda global flag
 # pt.cuda.is_available = lambda : False
@@ -113,12 +113,13 @@ def run_dcbc_existing(model_names, tdata, space, device=None, load_best=True, ve
         # load existing parcellation
         par = nb.load(atlas_dir +
                       f'/{space_dir}/atl-{model_name}_space-{space_name}_dseg.nii')
-        Pgroup = pt.tensor(atlas.read_data(par, 0) + 1,
+        Pgroup = pt.tensor(atlas.read_data(par, 0),
                            dtype=pt.get_default_dtype())
+        Pgroup = pt.where(Pgroup==0, pt.tensor(float('nan')), Pgroup)
         this_res = pd.DataFrame()
         # ------------------------------------------
         # Now run the DCBC evaluation fo the group only
-        dcbc_group = calc_test_dcbc(Pgroup, tdata, dist)
+        dcbc_group = calc_test_dcbc(Pgroup, tdata, dist, trim_nan=True)
 
         # ------------------------------------------
         # Collect the information from the evaluation
@@ -208,14 +209,15 @@ def plot_existing(D, t_data='MDTB', outName='7Tasks'):
 
 if __name__ == "__main__":
     ############# Evaluating models #############
-    # test_datasets_list = [7,7]
+    # test_datasets_list = [7,7,7,7]
     # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     # num_subj = T.return_nsubj.to_numpy()[test_datasets_list]
     # sub_list = [np.arange(c) for c in num_subj]
     #
     # # types = T.default_type.to_numpy()[test_datasets_list]
-    # types = ['Ico162Run','Ico162Run']
-    # sub_list = [np.arange(0, 100, 2), np.arange(0, 100, 2)+1]
+    # types = ['Tseries','Tseries','Tseries','Tseries']
+    # sub_list = [np.arange(0, 100, 4), np.arange(0, 100, 4)+1,
+    #             np.arange(0, 100, 4)+2, np.arange(0, 100, 4)+3]
     #
     # # Making half hcp resting subjects data
     # # sub_list = [np.arange(c) for c in num_subj[:-2]]
@@ -225,7 +227,7 @@ if __name__ == "__main__":
     #
     # eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
     #               t_datasets=T.name.to_numpy()[test_datasets_list],
-    #               type=types, subj=sub_list, out_name='hcpIco162')
+    #               type=types, subj=sub_list, out_name='hcpTs')
 
     # ############# Plot evaluation #############
     fname = f'/Models/Evaluation/eval_all_5existing_on_hcpTs.tsv'

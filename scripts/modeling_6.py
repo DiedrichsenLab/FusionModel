@@ -86,7 +86,7 @@ def get_cmap(mname, load_best=True, sym=False):
     return cmap.colors
 
 def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
-                  out_name=None):
+                  out_name=None, add_zero=False):
     """Evaluate group and individual DCBC and coserr of IBC single
        sessions on all other test datasets.
     Args:
@@ -108,6 +108,7 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
             this_type = this_ds.split("_")[1]
             subj = np.arange(0, 100, 2)
         else:
+            ds = this_ds
             this_type = T.loc[T.name == ds]['default_type'].item()
             subj = None
 
@@ -134,13 +135,33 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
             # get train/test index for cross validation
             train_indx = tinfo[indivtrain_ind] == indivtrain_values
             test_indx = tinfo[indivtrain_ind] != indivtrain_values
+            # Split tdata into individual training / testing
+            train_dat = tdata[:,train_indx,:]
+            test_dat = tdata[:,test_indx,:]
+
+            if add_zero and this_ds in ['Demand','WMFS','Somatotopic']:
+                # Add zero as rest to the data
+                train_dat = np.concatenate((train_dat,
+                                            np.zeros((train_dat.shape[0], 1, train_dat.shape[2]))),
+                                           axis=1)
+                test_dat = np.concatenate((test_dat,
+                                            np.zeros((test_dat.shape[0], 1, test_dat.shape[2]))),
+                                           axis=1)
+
+                # condition / partition vector
+                train_cond_vec = np.append(cond_vec[train_indx], cond_vec[train_indx][-1] + 1)
+                train_part_vec = np.append(part_vec[train_indx], part_vec[train_indx][-1])
+            else:
+                # condition / partition vector
+                train_cond_vec = cond_vec[train_indx]
+                train_part_vec = part_vec[train_indx]
+
             # 1. Run DCBC individual
-            res_dcbc = run_dcbc(model_name, tdata, atlas,
-                               train_indx=train_indx,
-                               test_indx=test_indx,
-                               cond_vec=cond_vec,
-                               part_vec=part_vec,
-                               device='cuda')
+            res_dcbc = run_dcbc(model_name, train_dat,
+                                test_dat, atlas,
+                                cond_vec=train_cond_vec,
+                                part_vec=train_part_vec,
+                                device='cuda')
             res_dcbc['indivtrain_ind'] = indivtrain_ind
             res_dcbc['indivtrain_val'] = indivtrain_values
             res_dcbc['test_data'] = t_datasets[i]
@@ -195,53 +216,108 @@ def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
                 print(f"Already fitted {dataname}, K={k}, Type={t}...")
 
 def plot_result_6(D, t_data='MDTB'):
+    """Leave MDTB as a clean benchmark test set
+    Args:
+        D: dataframe
+        t_data: name of the test dataset
+
+    Returns:
+        plot
+    """
+    D = D.loc[D.test_data == t_data]
+    D = D.loc[D.train_data != "['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']"]
     D = D.replace(["['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic' 'HCP']",
                    "['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']",
-                   "['HCP']"], ['task+rest', 'task', 'rest'])
-    D = D.loc[D.test_data == t_data]
+                   "['HCP']"], ['tasks+rest', 'tasks', 'HCP'])
 
     plt.figure(figsize=(10, 10))
     crits = ['dcbc_group', 'dcbc_indiv']
     for i, c in enumerate(crits):
         plt.subplot(2, 2, i*2 + 1)
-        sb.barplot(data=D, x='model_type', y=c, hue='train_data',
-                   hue_order=['task','rest','task+rest'], errorbar="se")
+        sb.barplot(data=D, x='train_data', y=c, hue='model_type', errorbar="se")
 
-        # if 'coserr' in c:
-        #     plt.ylim(0.4, 1)
+        if c == 'dcbc_group':
+            plt.ylim(0.02, 0.1)
+        elif c == 'dcbc_indiv':
+            plt.ylim(0.1, 0.18)
+        plt.xticks(rotation=45)
+
         plt.subplot(2, 2, i*2 + 2)
         sb.lineplot(data=D, x='K', y=c, hue='train_data',
-                    hue_order=['task','rest','task+rest'],
                     style="model_type", errorbar='se', markers=False)
 
     plt.suptitle(f'Task, rest, task+rest, test_data={t_data}')
     plt.tight_layout()
     plt.show()
 
-def plot_loo_task(D, t_data=['MDTB'], model_type='03'):
+def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6]):
+    num_td = len(t_data)
+    T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+
+    new_D = pd.DataFrame()
+    # fig, axes = plt.subplots(nrows=2, ncols=num_td, figsize=(5 * num_td, 10), sharey='row')
+    for i, d_idx in enumerate(t_data):
+        this_D = D.loc[D.test_data == T.name[d_idx]]
+
+        # Replace training dataset name to task, rest, task+rest
+        datasets_list = [0, 1, 2, 3, 4, 5, 6]
+        datasets_list.remove(d_idx)
+        tasks_name = T.name.to_numpy()[datasets_list]
+        all_name = T.name.to_numpy()[datasets_list + [7]]
+        rest_name = T.name.to_numpy()[[7]]
+
+        for st in this_D.train_data.unique():
+            if 'PandasArray' in st:
+                this_D = this_D.replace([st], [str(tasks_name)])
+
+        this_D = this_D.replace([str(all_name), str(tasks_name),
+                                 str(all_name).replace(" ", ", "),
+                                 str(tasks_name).replace(" ", ", "), str(rest_name)],
+                                ['task+rest', 'task', 'task+rest', 'task', 'rest'])
+
+        new_D = pd.concat([new_D, this_D], ignore_index=True)
+
+    plt.figure(figsize=(10, 10))
+    crits = ['dcbc_group', 'dcbc_indiv']
+    for i, c in enumerate(crits):
+        plt.subplot(2, 2, i * 2 + 1)
+        sb.barplot(data=new_D, x='train_data', order=['rest','task','task+rest'],
+                   y=c, hue='model_type', errorbar="se")
+
+        plt.subplot(2, 2, i * 2 + 2)
+        sb.lineplot(data=new_D, x='K', y=c, hue='train_data',hue_order=['rest','task','task+rest'],
+                    style="model_type", errorbar='se', markers=False)
+
+    plt.suptitle(f'Averaged leaveOneOut: Task, rest, task+rest, test_data=Tasks')
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_loo_task(D, t_data=['MDTB'], model_type='03', average=False):
     num_td = len(t_data)
     D = D.loc[D.model_type == f'Models_{model_type}']
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
 
     new_D = pd.DataFrame()
     fig, axes = plt.subplots(nrows=2, ncols=num_td, figsize=(5 * num_td, 10), sharey='row')
-    for i in range(num_td):
-        this_D = D.loc[D.test_data == T.name[i]]
+    for i, d_idx in enumerate(t_data):
+        this_D = D.loc[D.test_data == T.name[d_idx]]
 
         # Replace training dataset name to task, rest, task+rest
         datasets_list = [0, 1, 2, 3, 4, 5, 6]
-        datasets_list.remove(i)
+        datasets_list.remove(d_idx)
         tasks_name = T.name.to_numpy()[datasets_list]
         all_name = T.name.to_numpy()[datasets_list + [7]]
         rest_name = T.name.to_numpy()[[7]]
 
-        strings = this_D.train_data.unique()
-        for st in strings:
+        for st in this_D.train_data.unique():
             if 'PandasArray' in st:
                 this_D = this_D.replace([st], [str(tasks_name)])
 
-        this_D = this_D.replace([str(all_name), str(tasks_name), str(rest_name)],
-                                ['task+rest', 'task', 'rest'])
+        this_D = this_D.replace([str(all_name), str(tasks_name),
+                                 str(all_name).replace(" ", ", "),
+                                 str(tasks_name).replace(" ", ", "), str(rest_name)],
+                                ['task+rest', 'task', 'task+rest', 'task', 'rest'])
 
         # Set y-axis limits
         # y_max = max(this_D[['dcbc_group', 'dcbc_indiv']].max())
@@ -249,16 +325,17 @@ def plot_loo_task(D, t_data=['MDTB'], model_type='03'):
 
         # Create line plot for group and individual DCBC scores
         sb.lineplot(ax=axes[0, i], data=this_D, x='K', y='dcbc_group', hue='train_data',
-                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
-        axes[0, i].set_title(T.name[i])
+                    hue_order=['rest', 'task+rest', 'task'], errorbar='se', markers=False)
+        axes[0, i].set_title(T.name[d_idx])
         # axes[0, i].set_ylim(y_min, y_max)
 
         sb.lineplot(ax=axes[1, i], data=this_D, x='K', y='dcbc_indiv', hue='train_data',
-                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
-        axes[1, i].set_title(T.name[i])
+                    hue_order=['rest', 'task+rest', 'task'], errorbar='se', markers=False)
+        axes[1, i].set_title(T.name[d_idx])
         # axes[1, i].set_ylim(y_min, y_max)
 
-    new_D = pd.concat([new_D, this_D], ignore_index=True)
+        new_D = pd.concat([new_D, this_D], ignore_index=True)
+
     plt.suptitle(f'Model {model_type}: Task, rest, task+rest, test_data=Tasks')
     plt.tight_layout()
     plt.show()
@@ -278,12 +355,12 @@ def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
 
         plt.subplot(2, num_td, i+1)
         sb.lineplot(data=this_D, x='K', y='dcbc_group', hue='train_data',
-                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
+                    hue_order=['rest', 'task+rest', 'task'], errorbar='se', markers=False)
         plt.title(td)
 
         plt.subplot(2, num_td, i+num_td+1)
         sb.lineplot(data=this_D, x='K', y='dcbc_indiv', hue='train_data',
-                    hue_order=['task', 'rest', 'task+rest'], errorbar='se', markers=False)
+                    hue_order=['rest', 'task+rest', 'task'], errorbar='se', markers=False)
         plt.title(td)
 
     plt.suptitle(f'Model {model_type}: Task, rest, task+rest, test_data=rest')
@@ -355,15 +432,27 @@ if __name__ == "__main__":
     ############# Plot evaluation #############
     # 1. evaluation on Task
     fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
+    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_MdPoNiIbWmSoHcOdd_on_De.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_result_6(D, t_data='HCP')
     plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
+    plot_loo_task_avrg(D)
 
     # 2. evaluation on rest
-    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
-    D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_loo_rest(D, model_type='03')
+    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # plot_loo_rest(D, model_type='03')
 
+    # 3. Plot evaluation of result 6
+    fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
+    fname2 = f'/Models/Evaluation/eval_dataset7_asym.tsv'
+    D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
+    D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
+    D2 = D2.drop(['coserr_group', 'coserr_floor', 'coserr_ind2', 'coserr_ind3'], axis=1)
+    D2.rename(columns={'session': 'test_sess'}, inplace=True)
+    D1 = D1[D2.columns]
+    D = pd.concat([D2, D1])
+    D = D.reindex(columns=D2.columns)
+    plot_result_6(D, t_data='MDTB')
 
     ############# Plot fusion atlas #############
     # Making color map
