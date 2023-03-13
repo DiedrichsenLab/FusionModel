@@ -111,7 +111,7 @@ def calc_test_error(M, tdata, U_hats):
 
 
 def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
-                   trim_nan=False, verbose=True):
+                   trim_nan=False, return_wb_corr=False, verbose=True):
     """DCBC: evaluate the resultant parcellation using DCBC
     Args:
         parcels (np.ndarray): the input parcellation:
@@ -131,7 +131,7 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
         dist[pt.where(pt.isnan(parcels))[0], :] = pt.nan
         dist[:, pt.where(pt.isnan(parcels))[0]] = pt.nan
 
-    dcbc_values = []
+    dcbc_values, within, between = [], [], []
     for sub in range(testdata.shape[0]):
         print(f'Subject {sub}', end=':')
         tic = time.perf_counter()
@@ -144,9 +144,15 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
                              parcellation=parcels[sub],
                              dist=dist, func=testdata[sub].T)
         dcbc_values.append(D['DCBC'])
+        within.append(pt.stack(D['corr_within']))
+        between.append(pt.stack(D['corr_between']))
         toc = time.perf_counter()
         print(f"{toc-tic:0.4f}s")
-    return pt.stack(dcbc_values)
+
+    if return_wb_corr:
+        return pt.stack(dcbc_values), within, between
+    else:
+        return pt.stack(dcbc_values)
 
 
 def run_prederror(model_names, test_data, test_sess, cond_ind,

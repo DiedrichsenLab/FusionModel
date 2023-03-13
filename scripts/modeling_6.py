@@ -250,7 +250,7 @@ def plot_result_6(D, t_data='MDTB'):
     plt.tight_layout()
     plt.show()
 
-def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6]):
+def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6], save=False):
     num_td = len(t_data)
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
 
@@ -277,19 +277,36 @@ def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6]):
 
         new_D = pd.concat([new_D, this_D], ignore_index=True)
 
+    df1 = new_D.loc[new_D.model_type == 'Models_03'].reset_index()
+    df2 = new_D.loc[new_D.model_type == 'Models_04'].reset_index()
+    df_toadd = df1.copy()
+
+    df_toadd.loc[:, 'dcbc_group'] = (df1.dcbc_group.to_numpy() + df2.dcbc_group.to_numpy())/2
+    df_toadd.loc[:, 'dcbc_indiv'] = (df1.dcbc_indiv.to_numpy() + df2.dcbc_indiv.to_numpy())/2
+    df_toadd['model_type'].replace(['Models_03'], 'Average', inplace=True)
+    new_D = pd.concat([new_D, df_toadd], ignore_index=True)
+
     plt.figure(figsize=(10, 10))
     crits = ['dcbc_group', 'dcbc_indiv']
     for i, c in enumerate(crits):
         plt.subplot(2, 2, i * 2 + 1)
         sb.barplot(data=new_D, x='train_data', order=['rest','task','task+rest'],
-                   y=c, hue='model_type', errorbar="se")
+                   y=c, hue='model_type', errorbar="se", palette=sb.color_palette()[1:4])
+        if c == 'dcbc_group':
+            plt.ylim(0.06, 0.11)
+        elif c == 'dcbc_indiv':
+            plt.ylim(0.19, 0.225)
 
         plt.subplot(2, 2, i * 2 + 2)
         sb.lineplot(data=new_D, x='K', y=c, hue='train_data',hue_order=['rest','task','task+rest'],
-                    style="model_type", errorbar='se', markers=False)
+                    style="model_type", errorbar='se', markers=False,
+                    palette=sb.color_palette()[1:4])
 
     plt.suptitle(f'Averaged leaveOneOut: Task, rest, task+rest, test_data=Tasks')
     plt.tight_layout()
+
+    if save:
+        plt.savefig('task_vs_rest_loo.pdf', format='pdf')
     plt.show()
 
 
@@ -434,8 +451,8 @@ if __name__ == "__main__":
     fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
     # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_MdPoNiIbWmSoHcOdd_on_De.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
-    plot_loo_task_avrg(D)
+    # plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
+    plot_loo_task_avrg(D, save=True)
 
     # 2. evaluation on rest
     # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
@@ -443,16 +460,16 @@ if __name__ == "__main__":
     # plot_loo_rest(D, model_type='03')
 
     # 3. Plot evaluation of result 6
-    fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
-    fname2 = f'/Models/Evaluation/eval_dataset7_asym.tsv'
-    D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
-    D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
-    D2 = D2.drop(['coserr_group', 'coserr_floor', 'coserr_ind2', 'coserr_ind3'], axis=1)
-    D2.rename(columns={'session': 'test_sess'}, inplace=True)
-    D1 = D1[D2.columns]
-    D = pd.concat([D2, D1])
-    D = D.reindex(columns=D2.columns)
-    plot_result_6(D, t_data='MDTB')
+    # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
+    # fname2 = f'/Models/Evaluation/eval_dataset7_asym.tsv'
+    # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
+    # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
+    # D2 = D2.drop(['coserr_group', 'coserr_floor', 'coserr_ind2', 'coserr_ind3'], axis=1)
+    # D2.rename(columns={'session': 'test_sess'}, inplace=True)
+    # D1 = D1[D2.columns]
+    # D = pd.concat([D2, D1])
+    # D = D.reindex(columns=D2.columns)
+    # plot_result_6(D, t_data='MDTB')
 
     ############# Plot fusion atlas #############
     # Making color map

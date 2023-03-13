@@ -376,7 +376,7 @@ def plot_model_parcel(model_names, grid, cmap='tab20b', align=False, device=None
                     titles=titles)
 
 
-def _compute_var_cov(data, cond='all', mean_centering=True):
+def compute_var_cov(data, cond='all', mean_centering=True):
     """
         Compute the affinity matrix by given kernel type,
         default to calculate Pearson's correlation between all vertex pairs
@@ -446,10 +446,8 @@ def compute_DCBC(maxDist=35, binWidth=1, parcellation=np.empty([]),
     :param weighting:   Boolean value. True - add weighting scheme to DCBC (default)
                                        False - no weighting scheme to DCBC
     """
-
     numBins = int(np.floor(maxDist / binWidth))
-
-    cov, var = _compute_var_cov(func)
+    cov, var = compute_var_cov(func)
     # cor = np.corrcoef(func)
 
     # remove the nan value and medial wall from dist file
@@ -508,6 +506,49 @@ def compute_DCBC(maxDist=35, binWidth=1, parcellation=np.empty([]),
     }
 
     return D
+
+def compute_rawCorr(maxDist=35, binWidth=1, func=None, dist=None):
+    """
+    The main entry of DCBC calculation for volume space
+    :param hems:        Hemisphere to test. 'L' - left hemisphere;
+                        'R' - right hemisphere; 'all' - both hemispheres
+    :param maxDist:     The maximum distance for vertices pairs
+    :param binWidth:    The spatial binning width in mm, default 1 mm
+    :param parcellation:
+    :param dist_file:   The path of distance metric of vertices pairs,
+                        for example Dijkstra's distance, GOD distance
+                        Euclidean distance. Dijkstra's distance as default
+    """
+    if type(func) is np.ndarray:
+        func = pt.tensor(func, dtype=pt.get_default_dtype())
+
+    numBins = int(np.floor(maxDist / binWidth))
+    cov, var = compute_var_cov(func)
+
+    # remove the nan value and medial wall from dist file
+    dist = dist.to_sparse()
+    row = dist.indices()[0]
+    col = dist.indices()[1]
+    distance = dist.values()
+    # row, col, distance = sp.sparse.find(dist)
+
+    # making parcellation matrix without medial wall and nan value
+    num, corr,= [], []
+    for i in range(numBins):
+        inBin = pt.where((distance > i * binWidth) &
+                         (distance <= (i + 1) * binWidth))[0]
+
+        # Retrieve and append the number of vertices in current bin
+        num.append(pt.tensor(inBin.numel(), dtype=pt.get_default_dtype()))
+
+        # Compute and append averaged correlation in current bin
+        this_corr = pt.nanmean(cov[row[inBin], col[inBin]]) \
+                    / pt.nanmean(var[row[inBin], col[inBin]])
+        corr.append(this_corr)
+
+        del inBin
+
+    return pt.stack(num), pt.stack(corr)
 
 def similarity_between_datasets(base_dir, dataset_name, atlas='MNISymC3',
                                 subtract_mean=True, voxel_wise=True):

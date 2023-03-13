@@ -83,8 +83,8 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                 with open(wdir + fname + '.pickle', 'wb') as file:
                     pickle.dump(models, file)
 
-def eval_smoothed(model_name, t_datasets=['MDTB','Pontine','Nishimoto'],
-                  train_ses='ses-s1', test_ses='ses-s2', train_smooth=None):
+def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
+                  test_ses='ses-s2', train_smooth=None, test_smooth=None):
     """Evaluate group and individual DCBC and coserr of IBC single
        sessions on all other test datasets.
     Args:
@@ -107,7 +107,8 @@ def eval_smoothed(model_name, t_datasets=['MDTB','Pontine','Nishimoto'],
                                                       sess=[train_ses], type=this_type,
                                                       smooth=None if train_smooth==2 else train_smooth)
         test_dat, _, _ = get_dataset(base_dir, ds, atlas='MNISymC3',
-                                     sess=[test_ses], type=this_type)
+                                     sess=[test_ses], type=this_type,
+                                     smooth=None if test_smooth==2 else test_smooth)
 
         cond_vec = train_inf[train_tds.cond_ind].values.reshape(-1, ) # default from dataset class
         part_vec = train_inf['half'].values
@@ -217,7 +218,7 @@ if __name__ == "__main__":
     ############# Evaluating models #############
     # model_name = []
     # K = [10,17,20,34,40,68,100]
-    # model_type = ['04']
+    # model_type = ['03','04']
     # smooth = [0,2,3,7]
     # CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
     # D = pd.DataFrame()
@@ -234,7 +235,7 @@ if __name__ == "__main__":
     #                                for this_k in K]
     #
     #         results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
-    #                                 test_ses=test_ses, train_smooth=s)
+    #                                 test_ses=test_ses, train_smooth=s, test_smooth=0)
     #         D = pd.concat([D, results], ignore_index=True)
     #
     # # Save file
