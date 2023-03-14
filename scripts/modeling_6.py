@@ -175,7 +175,7 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
         fname = f'/eval_all_asym_K-{K}_{out_name}_on_HcEven.tsv'
         results.to_csv(wdir + fname, index=False, sep='\t')
 
-def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
+def fit_rest_vs_task(datasets_list=[1,7], K=[34], sym_type=['asym'],
                      model_type=['03','04'], space='MNISymC3'):
     """Fitting model of task-datasets (MDTB out) + HCP (half subjects)
 
@@ -199,19 +199,21 @@ def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
     sub_list += [hcp_train]
     for t in model_type:
         for k in K:
-            writein_dir = ut.model_dir + f'/Models/Models_{t}/leaveNout'
+            writein_dir = ut.model_dir + f'/Models/Models_{t}'
             dataname = ''.join(T.two_letter_code[datasets_list])
-            nam = f'/asym_{dataname}_space-MNISymC3_K-{k}_hcpOdd'
-            if Path(writein_dir + nam + '.tsv').exists():
-                wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
-                                                    repeats=100, model_type=t,
-                                                    sym_type=sym_type,
-                                                    subj_list=sub_list,
-                                                    space=space)
-                fname = fname + f'_hcpOdd'
-                info.to_csv(wdir + fname + '.tsv', sep='\t')
-                with open(wdir + fname + '.pickle', 'wb') as file:
-                    pickle.dump(models, file)
+            nam = f'/asym_{dataname}_space-MNISymC3_K-{k}'
+            if not Path(writein_dir + nam + '.tsv').exists():
+                # wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
+                #                                     repeats=100, model_type=t,
+                #                                     sym_type=sym_type,
+                #                                     subj_list=sub_list,
+                #                                     space=space)
+                fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=t,
+                        sym_type=sym_type, space=space)
+                # fname = fname + f'_hcpOdd'
+                # info.to_csv(wdir + fname + '.tsv', sep='\t')
+                # with open(wdir + fname + '.pickle', 'wb') as file:
+                #     pickle.dump(models, file)
             else:
                 print(f"Already fitted {dataname}, K={k}, Type={t}...")
 
@@ -285,6 +287,11 @@ def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6], save=False):
     df_toadd.loc[:, 'dcbc_indiv'] = (df1.dcbc_indiv.to_numpy() + df2.dcbc_indiv.to_numpy())/2
     df_toadd['model_type'].replace(['Models_03'], 'Average', inplace=True)
     new_D = pd.concat([new_D, df_toadd], ignore_index=True)
+
+    nums = [('Pontine',24), ('Nishimoto',32), ('IBC',38), ('WMFS',50), ('Demand',66),
+            ('Somatotopic', 103)]
+    for (td, i) in nums:
+        new_D.loc[new_D.test_data == td, 'subj_num'] += i
 
     plt.figure(figsize=(10, 10))
     crits = ['dcbc_group', 'dcbc_indiv']
@@ -386,12 +393,12 @@ def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    # for i in range(0,7):
-    #     datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
-    #     datasets_list.remove(i)
-    #     print(datasets_list)
-    #     fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
-    #                      sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
+    for i in [6,5,4,3,2,1,0]:
+        datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
+        datasets_list.remove(i)
+        print(datasets_list)
+        fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
+                         sym_type=['asym'], model_type=['03'], space='MNISymC3')
 
     ############# Evaluating models (on task) #############
     # model_type = ['03', '04']

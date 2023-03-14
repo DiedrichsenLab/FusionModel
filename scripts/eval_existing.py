@@ -162,7 +162,7 @@ def run_dcbc_existing(model_names, tdata, space, device=None, load_best=True, ve
         # Now run the DCBC evaluation fo the group only
         dcbc_group, corr_w, corr_b = calc_test_dcbc(Pgroup, tdata, dist,
                                                     max_dist=110, bin_width=5,
-                                                    trim_nan=True)
+                                                    trim_nan=True, return_wb_corr=True)
         cw.append(pt.stack(corr_w))
         cb.append(pt.stack(corr_b))
         # ------------------------------------------
@@ -263,6 +263,7 @@ def plot_existing_corr_wb(corr_w, corr_b, par_name=['Anatom'], datasets=['HCP'],
     num_row = len(datasets)
     num_col = len(par_name)
 
+    cw_all, cb_all = [], []
     plt.figure(figsize=(5*num_col, 5*num_row))
     for i in range(num_row):
         this_cw = corr_w[i]
@@ -327,14 +328,19 @@ if __name__ == "__main__":
     #               t_datasets=T.name.to_numpy()[test_datasets_list],
     #               type=types, subj=sub_list, out_name='hcpTs')
 
-    # 2. Check within and between curve
+    # 2. Check within and between curve on HCP raw timeseries
     corrW, corrB = eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
                                  t_datasets=T.name.to_numpy()[test_datasets_list],
                                  type=types, subj=sub_list, out_name='hcpTs',
                                  save=False, plot_wb=True)
+    corrW = pt.nanmean(pt.stack([pt.stack(s) for s in corrW]), dim=0)
+    corrB = pt.nanmean(pt.stack([pt.stack(s) for s in corrB]), dim=0)
+    corrW = [corrW.unbind(dim=0)]
+    corrB = [corrB.unbind(dim=0)]
+
     plot_existing_corr_wb(corrW, corrB, par_name=['Anatom', 'Buckner7',
                                                   'Buckner17', 'Ji10', 'MDTB10'],
-                          datasets=['HCP', 'HCP'])
+                          datasets=['HCP'])
 
     # ############# Plot evaluation #############
     fname = f'/Models/Evaluation/eval_all_5existing_on_hcpTs.tsv'
