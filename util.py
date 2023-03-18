@@ -280,7 +280,7 @@ def plot_multi_flat(data, atlas, grid,
         cmap = [cmap] * n_subplots
 
     for i in np.arange(n_subplots):
-        plt.subplot(grid[0], grid[1], i + 1)
+        # plt.subplot(grid[0], grid[1], i + 1)
         plot_data_flat(data[i], atlas,
                        cmap=cmap[i],
                        dtype=dtype,
@@ -288,17 +288,17 @@ def plot_multi_flat(data, atlas, grid,
                        render='matplotlib',
                        colorbar=(i == 0) & colorbar)
 
-        plt.title(titles[i])
+        # plt.title(titles[i])
         plt.tight_layout()
-        # if titles is not None:
-        #     plt.title(titles[i])
-        #     # if save_fig:
-        #     #     fname = f'rel_{titles[i]}.png'
-        #     #     if save_under is not None:
-        #     #         fname = save_under
-        #     #     plt.savefig(fname, format='png')
-        #     plt.savefig(f'rel_{titles[i]}_{i}.png', format='png',
-        #                 bbox_inches='tight', pad_inches=0)
+        if titles is not None:
+            # plt.title(titles[i])
+            # if save_fig:
+            #     fname = f'rel_{titles[i]}.png'
+            #     if save_under is not None:
+            #         fname = save_under
+            #     plt.savefig(fname, format='png')
+            plt.savefig(f'rel_{titles[i]}_{i}.png', format='png',
+                        bbox_inches='tight', pad_inches=0)
 
 
 def hard_max(Prob):

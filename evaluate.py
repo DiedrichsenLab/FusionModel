@@ -362,8 +362,8 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
     return results
 
 
-def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
-             part_vec, device=None, load_best=True, verbose=True):
+def run_dcbc(model_names, train_data, test_data, atlas, cond_vec, part_vec,
+             device=None, load_best=True, verbose=True, same_subj=False):
     """ Calculates DCBC using a test_data set. The test data splitted into
         individual training and test set given by `train_indx` and `test_indx`.
         First we use individual training data to derive an individual
@@ -416,30 +416,44 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
 
         Prop = model.marginal_prob()
         this_res = pd.DataFrame()
-        # ------------------------------------------
-        # Train an emission model on the individual training data
-        # and get a Uhat (individual parcellation) from it.
-        indivtrain_em = em.MixVMF(K=minfo.K, N=40,
-                                  P=model.emissions[0].P,
-                                  X=matrix.indicator(cond_vec),
-                                  part_vec=part_vec,
-                                  uniform_kappa=model.emissions[0].uniform_kappa)
-        indivtrain_em.initialize(train_data)
-        model.emissions = [indivtrain_em]
-        model.initialize()
-        # Gets us the individual parcellation
-        model, _, _, U_indiv = model.fit_em(iter=200, tol=0.1,
-                                            fit_emission=True,
-                                            fit_arrangement=False,
-                                            first_evidence=False)
-        U_indiv = model.remap_evidence(U_indiv)
+        if same_subj:
+            # If the training dataset comes from the same subjects, we
+            # can get the individual parcellations directly by E-step
+            if not isinstance(train_data, list):
+                train_data = [train_data]
+
+            model.initialize(train_data)
+            emloglik = model.collect_evidence([e.Estep() for e in model.emissions])
+            U_indiv =  model.Estep()[0]
+        else:
+            # ------------------------------------------
+            # Train an emission model on the individual training data
+            # and get a Uhat (individual parcellation) from it.
+            indivtrain_em = em.MixVMF(K=minfo.K, N=40,
+                                      P=model.emissions[0].P,
+                                      X=matrix.indicator(cond_vec),
+                                      part_vec=part_vec,
+                                      uniform_kappa=model.emissions[0].uniform_kappa)
+            indivtrain_em.initialize(train_data)
+            model.emissions = [indivtrain_em]
+            model.initialize()
+            # Gets us the individual parcellation
+            model, _, _, U_indiv = model.fit_em(iter=200, tol=0.1,
+                                                fit_emission=True,
+                                                fit_arrangement=False,
+                                                first_evidence=False)
+            emloglik = model.emissions[0].Estep()
 
         # ------------------------------------------
         # Now run the DCBC evaluation fo the group and individuals
+        U_indiv_em = model.remap_evidence(pt.softmax(emloglik, dim=1))
+        U_indiv = model.remap_evidence(U_indiv)
         Pgroup = pt.argmax(Prop, dim=0) + 1
         Pindiv = pt.argmax(U_indiv, dim=1) + 1
+        Pindiv_em = pt.argmax(U_indiv_em, dim=1) + 1
         dcbc_group = calc_test_dcbc(Pgroup, test_data, dist)
         dcbc_indiv = calc_test_dcbc(Pindiv, test_data, dist)
+        dcbc_indiv_em = calc_test_dcbc(Pindiv_em, test_data, dist)
 
         # ------------------------------------------
         # Collect the information from the evaluation
@@ -457,6 +471,7 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
         # Add all the evaluations to the data frame
         ev_df['dcbc_group'] = dcbc_group.cpu()
         ev_df['dcbc_indiv'] = dcbc_indiv.cpu()
+        ev_df['dcbc_indiv_em'] = dcbc_indiv_em.cpu()
         this_res = pd.concat([this_res, ev_df], ignore_index=True)
 
         # Concate model type

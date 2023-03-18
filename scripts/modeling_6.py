@@ -455,11 +455,11 @@ if __name__ == "__main__":
 
     ############# Plot evaluation #############
     # 1. evaluation on Task
-    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
-    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_MdPoNiIbWmSoHcOdd_on_De.tsv'
-    D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
-    plot_loo_task_avrg(D, save=True)
+    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
+    # # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_MdPoNiIbWmSoHcOdd_on_De.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # # plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
+    # plot_loo_task_avrg(D, save=True)
 
     # 2. evaluation on rest
     # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
@@ -480,12 +480,30 @@ if __name__ == "__main__":
 
     ############# Plot fusion atlas #############
     # Making color map
-    # K = 34
-    # fname = [f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}',
-    #          f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-{K}_hcpOdd',
-    #          f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{K}_hcpOdd']
-    # colors = get_cmap(f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}')
+    # K = [34]
+    # model_type = ['03']
+    # # fname = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34',
+    # #          f'/Models_03/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-34',
+    # #          f'/Models_03/asym_Hc_space-MNISymC3_K-34']
+    # colors = get_cmap(f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-34_hcpOdd')
+    # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    # results = pd.DataFrame()
+    # model_name = []
+    # for i in range(0, 7):
+    #     datasets_list = [0, 1, 2, 3, 4, 5, 6]
+    #     datasets_list.remove(i)
+    #     dataname = ''.join(T.two_letter_code[datasets_list])
+    #     # Pure Task
+    #     model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
+    #                    for this_k in K for mt in model_type]
+    #     # Task+rest
+    #     model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                    for this_k in K for mt in model_type]
     #
-    # plt.figure(figsize=(20, 10))
-    # plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
+    # # Pure Rest
+    # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                for this_k in K for mt in model_type]
+    #
+    # plt.figure(figsize=(10, 10))
+    # plot_model_parcel(model_name, [8, 2], cmap=colors, align=True, device='cuda')
     # plt.show()

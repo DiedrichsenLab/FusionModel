@@ -76,9 +76,9 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                                                     this_sess=[[indv_sess]],
                                                     space='MNISymC3', smooth=s)
 
-                # wdir = wdir + '/smoothed'
-                # fname = fname + f'_smooth-{s}_{indv_sess}'
-                fname = fname + f'_{indv_sess}'
+                wdir = wdir + '/smoothed'
+                fname = fname + f'_smooth-{s}_{indv_sess}'
+                # fname = fname + f'_{indv_sess}'
                 info.to_csv(wdir + fname + '.tsv', sep='\t')
                 with open(wdir + fname + '.pickle', 'wb') as file:
                     pickle.dump(models, file)
@@ -103,6 +103,11 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
         print(f'Testdata: {ds}\n')
         # Preparing atlas, cond_vec, part_vec
         this_type = T.loc[T.name == ds]['default_type'].item()
+        # train_dat = fMRI_Dataset(base_dir, ds, atlas='MNISymC3',
+        #                          sess=[train_ses], type=this_type,
+        #                          smooth=None if train_smooth==2 else train_smooth)
+        # dataloader = DataLoader(train_dat, batch_size=5, shuffle=True, num_workers=0,
+        #                         drop_last=False)
         train_dat, train_inf, train_tds = get_dataset(base_dir, ds, atlas='MNISymC3',
                                                       sess=[train_ses], type=this_type,
                                                       smooth=None if train_smooth==2 else train_smooth)
@@ -115,11 +120,12 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
 
         # 1. Run DCBC individual
         res_dcbc = run_dcbc(model_name, train_dat, test_dat, atlas,
-                            cond_vec, part_vec, device='cuda')
+                            cond_vec, part_vec, device='cuda', same_subj=True)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
         res_dcbc['test_ses'] = test_ses
-        res_dcbc['smooth'] = train_smooth
+        res_dcbc['train_smooth'] = train_smooth
+        res_dcbc['test_smooth'] = test_smooth
         results = pd.concat([results, res_dcbc], ignore_index=True)
 
     return results
@@ -212,46 +218,46 @@ def make_all_in_one_tsv(path, out_name):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    # fit_smooth(model_type='03')
-    # fit_smooth(smooth=[None], model_type='04')
+    # fit_smooth(smooth=[1], model_type='03')
+    # fit_smooth(smooth=[1], model_type='04')
 
     ############# Evaluating models #############
-    # model_name = []
-    # K = [10,17,20,34,40,68,100]
-    # model_type = ['03','04']
-    # smooth = [0,2,3,7]
-    # CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
-    # D = pd.DataFrame()
-    #
-    # for (train_ses, test_ses) in CV_setting:
-    #     for s in smooth:
-    #         for mt in model_type:
-    #             if s != 2:
-    #                 model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
-    #                                f'{this_k}_smooth-{s}_{train_ses}'
-    #                                for this_k in K]
-    #             else:
-    #                 model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
-    #                                for this_k in K]
-    #
-    #         results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
-    #                                 test_ses=test_ses, train_smooth=s, test_smooth=0)
-    #         D = pd.concat([D, results], ignore_index=True)
-    #
-    # # Save file
-    # wdir = model_dir + f'/Models/Evaluation'
-    # fname = f'/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
-    # D.to_csv(wdir + fname, index=False, sep='\t')
+    model_name = []
+    K = [10,17,20,34,40,68,100]
+    model_type = ['03','04']
+    smooth = [0,1,2,3,7]
+    CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
+    D = pd.DataFrame()
+
+    for (train_ses, test_ses) in CV_setting:
+        for t in smooth:
+            for s in smooth:
+                if s != 2:
+                    model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
+                                   f'{this_k}_smooth-{s}_{train_ses}'
+                                   for this_k in K for mt in model_type]
+                else:
+                    model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
+                                   for this_k in K for mt in model_type]
+
+                results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
+                                        test_ses=test_ses, train_smooth=s, test_smooth=t)
+                D = pd.concat([D, results], ignore_index=True)
+
+    # Save file
+    wdir = model_dir + f'/Models/Evaluation'
+    fname = f'/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
+    D.to_csv(wdir + fname, index=False, sep='\t')
 
     ############# Plotting comparison #############
-    # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
-    # fname2 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdSmoothed_on_otherDatasets.tsv'
-    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
-    D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
-    # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
-    #
-    # D1['smooth'] = 2
-    # D2['smooth'] = 7
-    # D = pd.concat([D1, D2], ignore_index=True)
-    plot_smooth_vs_unsmooth(D)
+    # # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
+    # # fname2 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdSmoothed_on_otherDatasets.tsv'
+    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
+    # # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
+    # #
+    # # D1['smooth'] = 2
+    # # D2['smooth'] = 7
+    # # D = pd.concat([D1, D2], ignore_index=True)
+    # plot_smooth_vs_unsmooth(D)
