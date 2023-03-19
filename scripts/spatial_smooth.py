@@ -62,8 +62,8 @@ res_dir = model_dir + f'/Results'
 
 def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                datasets_list=[0]):
-    datasets = np.array(['MDTB', 'Pontine', 'Nishimoto', 'IBC', 'WMFS',
-                         'Demand', 'Somatotopic', 'HCP'], dtype=object)
+    # datasets = np.array(['MDTB', 'Pontine', 'Nishimoto', 'IBC', 'WMFS',
+    #                      'Demand', 'Somatotopic', 'HCP'], dtype=object)
     _, _, my_dataset = get_dataset(ut.base_dir, 'MDTB')
     sess = my_dataset.sessions
     for indv_sess in sess:
@@ -76,9 +76,14 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                                                     this_sess=[[indv_sess]],
                                                     space='MNISymC3', smooth=s)
 
-                wdir = wdir + '/smoothed'
-                fname = fname + f'_smooth-{s}_{indv_sess}'
-                # fname = fname + f'_{indv_sess}'
+                if s is not None:
+                    wdir = wdir + '/smoothed'
+                    fname = fname + f'_smooth-{s}_{indv_sess}'
+                else:
+                    fname = fname + f'_{indv_sess}'
+
+                # Write in fitted files
+                print(f'Write in {wdir + fname}...')
                 info.to_csv(wdir + fname + '.tsv', sep='\t')
                 with open(wdir + fname + '.pickle', 'wb') as file:
                     pickle.dump(models, file)
@@ -130,6 +135,31 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
 
     return results
 
+def eval_smoothed_models(K=[10,17,20,34,40,68,100], model_type=['03','04'],
+                         smooth=[0,1,2,3,7], outname='K-10to100_Md_on_Sess_smooth'):
+    CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
+    D = pd.DataFrame()
+    for (train_ses, test_ses) in CV_setting:
+        for t in smooth:
+            for s in smooth:
+                model_name = []
+                if s != 2:
+                    model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
+                                   f'{this_k}_smooth-{s}_{train_ses}'
+                                   for this_k in K for mt in model_type]
+                else:
+                    model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
+                                   for this_k in K for mt in model_type]
+
+                results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
+                                        test_ses=test_ses, train_smooth=s, test_smooth=t)
+                D = pd.concat([D, results], ignore_index=True)
+
+    # Save file
+    wdir = model_dir + f'/Models/Evaluation'
+    fname = f'/eval_all_asym_{outname}.tsv'
+    D.to_csv(wdir + fname, index=False, sep='\t')
+
 def result_1_plot_curve(fname, crits=['coserr', 'dcbc'], oname=None, save=False):
     D = pd.read_csv(fname, delimiter='\t')
     num_plot = len(crits)
@@ -174,21 +204,36 @@ def result_1_plot_flatmap(Us, sub=0, cmap='tab20', save_folder=None):
 
     plt.show()
 
-def plot_smooth_vs_unsmooth(D, model_type='Models_01'):
-    plt.figure(figsize=(10, 10))
-    crits = ['dcbc_group', 'dcbc_indiv']
+def plot_smooth_vs_unsmooth(D, test_s=0):
+    D = D.loc[D.test_smooth==test_s]
+    plt.figure(figsize=(10, 15))
+    crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
     for i, c in enumerate(crits):
-        plt.subplot(2, 2, i*2 + 1)
-        sb.barplot(data=D, x='model_type', y=c, hue='smooth', errorbar="se")
+        plt.subplot(3, 2, i*2 + 1)
+        sb.barplot(data=D, x='model_type', y=c, hue='train_smooth', errorbar="se")
 
         # if 'coserr' in c:
         #     plt.ylim(0.4, 1)
-        plt.subplot(2, 2, i*2 + 2)
-        sb.lineplot(data=D, x='K', y=c, hue='model_type', style="smooth",
+        plt.subplot(3, 2, i*2 + 2)
+        sb.lineplot(data=D, x='K', y=c, hue='model_type', style="train_smooth",
                     errorbar=None, err_style="bars", markers=False)
 
     plt.suptitle(f'All datasets fusion')
     plt.tight_layout()
+    plt.show()
+
+def plot_smooth_map(K=40, model_type='03', sess='ses-s1'):
+    fname = [f'/Models_{model_type}/smoothed/asym_Md_space-MNISymC3_K-{K}_smooth-0_{sess}',
+             f'/Models_{model_type}/smoothed/asym_Md_space-MNISymC3_K-{K}_smooth-1_{sess}',
+             f'/Models_{model_type}/asym_Md_space-MNISymC3_K-{K}_{sess}',
+             f'/Models_{model_type}/smoothed/asym_Md_space-MNISymC3_K-{K}_smooth-3_{sess}',
+             f'/Models_{model_type}/smoothed/asym_Md_space-MNISymC3_K-{K}_smooth-7_{sess}']
+
+    # Get the color of 2mm smoothing
+    colors = get_cmap(f'/Models_{model_type}/asym_Md_space-MNISymC3_K-{K}_{sess}')
+
+    plt.figure(figsize=(40, 8))
+    plot_model_parcel(fname, [1, 5], cmap=colors, align=True, device='cuda')
     plt.show()
 
 def make_all_in_one_tsv(path, out_name):
@@ -218,46 +263,17 @@ def make_all_in_one_tsv(path, out_name):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    # fit_smooth(smooth=[1], model_type='03')
-    # fit_smooth(smooth=[1], model_type='04')
+    fit_smooth(smooth=[None], model_type='03')
+    fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
-    model_name = []
-    K = [10,17,20,34,40,68,100]
-    model_type = ['03','04']
-    smooth = [0,1,2,3,7]
-    CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
-    D = pd.DataFrame()
-
-    for (train_ses, test_ses) in CV_setting:
-        for t in smooth:
-            for s in smooth:
-                if s != 2:
-                    model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
-                                   f'{this_k}_smooth-{s}_{train_ses}'
-                                   for this_k in K for mt in model_type]
-                else:
-                    model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
-                                   for this_k in K for mt in model_type]
-
-                results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
-                                        test_ses=test_ses, train_smooth=s, test_smooth=t)
-                D = pd.concat([D, results], ignore_index=True)
-
-    # Save file
-    wdir = model_dir + f'/Models/Evaluation'
-    fname = f'/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
-    D.to_csv(wdir + fname, index=False, sep='\t')
+    eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
 
     ############# Plotting comparison #############
-    # # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdUnSmoothed_on_otherDatasets.tsv'
-    # # fname2 = f'/Models/Evaluation/eval_all_asym_K-10to100_MdSmoothed_on_otherDatasets.tsv'
-    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
-    # D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
-    # # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
-    # #
-    # # D1['smooth'] = 2
-    # # D2['smooth'] = 7
-    # # D = pd.concat([D1, D2], ignore_index=True)
-    # plot_smooth_vs_unsmooth(D)
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+    plot_smooth_vs_unsmooth(D, test_s=0)
+
+    ############# Plot fusion atlas #############
+    # Making color map
+    # plot_smooth_map(K=40, model_type='03', sess='ses-s1')
