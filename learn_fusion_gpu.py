@@ -26,15 +26,9 @@ from copy import deepcopy
 import time
 
 
-def build_data_list(datasets,
-                    atlas='MNISymC3',
-                    sess=None,
-                    cond_ind=None,
-                    type=None,
-                    part_ind=None,
-                    subj=None,
-                    join_sess=True,
-                    join_sess_part=False, smooth=None):
+def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
+                    type=None, part_ind=None, subj=None, join_sess=True,
+                    join_sess_part=False, smooth=None, hemis=None):
     """Builds list of datasets, cond_vec, part_vec, subj_ind
     from different data sets
     Args:
@@ -44,18 +38,14 @@ def build_data_list(datasets,
         design_ind (list, optional): _description_. Defaults to None.
         part_ind (list, optional): _description_. Defaults to None.
         subj (list, optional): _description_. Defaults to None.
-        join_sess (bool, optional): Model the sessions with a single model . Defaults to True.
+        join_sess (bool, optional): Model the sessions with a single model.
+            Defaults to True.
     Returns:
-        data,
-        cond_vec,
-        part_vec,
-        subj_ind
+        data, cond_vec, part_vec, subj_ind
     """
     n_sets = len(datasets)
-    data = []
-    cond_vec = []
-    part_vec = []
-    subj_ind = []
+    this_at, _ = am.get_atlas(atlas, ut.atlas_dir)
+    data, cond_vec, part_vec, subj_ind = [],[],[],[]
 
     # Set defaults for data sets:
     if sess is None:
@@ -71,9 +61,11 @@ def build_data_list(datasets,
     # Run over datasets get data + design
     for i in range(n_sets):
         dat, info, ds = get_dataset(ut.base_dir, datasets[i],
-                                    atlas=atlas,
-                                    sess=sess[i],
+                                    atlas=atlas, sess=sess[i],
                                     type=type[i], smooth=smooth)
+        if hemis is not None:
+            stru_idx = this_at.structure.index(hemis)
+            dat = dat[:,:,this_at.indx_full[stru_idx]]
         # Sub-index the subjects:
         if subj is not None:
             dat = dat[subj[i], :, :]
@@ -172,7 +164,8 @@ def batch_fit(datasets, sess,
               join_sess=True,
               join_sess_part=False,
               weighting=None,
-              smooth=None):
+              smooth=None,
+              hemis=None):
     """ Executes a set of fits starting from random starting values
     selects the best one from a batch and saves them
 
@@ -207,12 +200,17 @@ def batch_fit(datasets, sess,
                                                          subj=subj,
                                                          join_sess=join_sess,
                                                          join_sess_part=join_sess_part,
-                                                         smooth=smooth)
+                                                         smooth=smooth,
+                                                         hemis=hemis)
     toc = time.perf_counter()
     print(f'Done loading. Used {toc - tic:0.4f} seconds!')
 
     # Load all necessary data and designs
     n_sets = len(data)
+    if hemis == 'cortex_left':
+        atlas, _ = am.get_atlas('fs32k_L', ut.atlas_dir)
+    elif hemis == 'cortex_right':
+        atlas, _ = am.get_atlas('fs32k_R', ut.atlas_dir)
 
     print(f'Building fullMultiModel {arrange} + {emission} for fitting...')
     M = build_model(K, arrange, sym_type, emission, atlas,
@@ -237,7 +235,7 @@ def batch_fit(datasets, sess,
 
     # Iterate over the number of fits
     ll = np.empty((n_fits, n_iter))
-    prior = pt.zeros((n_fits, K, atlas.P))
+    # prior = pt.zeros((n_fits, K, atlas.P))
     for i in range(n_fits):
         print(f'Start fit: repetition {i} - {name}')
 
@@ -248,7 +246,7 @@ def batch_fit(datasets, sess,
         m.initialize(data, subj_ind=subj_ind)
         fm.report_cuda_memory()
 
-        m, ll, theta, U_hat, ll_init = m.fit_em_ninits(
+        m, ll, _, _, _ = m.fit_em_ninits(
             iter=n_iter,
             tol=0.01,
             fit_arrangement=True,
@@ -260,25 +258,25 @@ def batch_fit(datasets, sess,
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
         m.clear()
 
-        # Align group priors
-        if i == 0:
-            indx = pt.arange(K)
-        else:
-            indx = ev.matching_greedy(prior[0, :, :], m.marginal_prob())
-        prior[i, :, :] = m.marginal_prob()[indx, :]
-
-        this_similarity = []
-        for j in range(i):
-            # Option1: K*K similarity matrix between two Us
-            # this_crit = cal_corr(prior[i, :, :], prior[j, :, :])
-            # this_similarity.append(1 - pt.diagonal(this_crit).mean())
-
-            # Option2: L1 norm between two Us
-            this_crit = pt.abs(prior[i, :, :] - prior[j, :, :]).mean()
-            this_similarity.append(this_crit)
-
-        num_rep = sum(sim < 0.02 for sim in this_similarity)
-        print(num_rep)
+        # # Align group priors
+        # if i == 0:
+        #     indx = pt.arange(K)
+        # else:
+        #     indx = ev.matching_greedy(prior[0, :, :], m.marginal_prob())
+        # prior[i, :, :] = m.marginal_prob()[indx, :]
+        #
+        # this_similarity = []
+        # for j in range(i):
+        #     # Option1: K*K similarity matrix between two Us
+        #     # this_crit = cal_corr(prior[i, :, :], prior[j, :, :])
+        #     # this_similarity.append(1 - pt.diagonal(this_crit).mean())
+        #
+        #     # Option2: L1 norm between two Us
+        #     this_crit = pt.abs(prior[i, :, :] - prior[j, :, :]).mean()
+        #     this_similarity.append(this_crit)
+        #
+        # num_rep = sum(sim < 0.02 for sim in this_similarity)
+        # print(num_rep)
 
         # Move to CPU device before storing
         m.move_to(device='cpu')
@@ -286,8 +284,8 @@ def batch_fit(datasets, sess,
 
         # Convergence: 1. must run enough repetitions (50);
         #              2. num_rep greater than threshold (10% of max_iter)
-        if (i > 50) and (num_rep >= int(n_fits * 0.1)):
-            break
+        # if (i > 50) and (num_rep >= int(n_fits * 0.1)):
+        #     break
         iter_toc = time.perf_counter()
         print(
             f'Done fit: repetition {i} - {name} - {iter_toc - iter_tic:0.4f} seconds!')
@@ -315,6 +313,12 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
     # Make the atlas object
     if space is None:
         space = 'MNISymC3'
+
+    hemis = None
+    this_space = space
+    if space.startswith('fs32k-'):
+        hemis = space.split('-')[1]
+        space = space.split('-')[0]
 
     atlas, _ = am.get_atlas(space, ut.atlas_dir)
 
@@ -371,18 +375,19 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  join_sess_part=join_sess_part,
                                  uniform_kappa=uniform_kappa,
                                  weighting=weighting,
-                                 smooth=smooth)
+                                 smooth=smooth,
+                                 hemis=hemis)
 
         # Save the fits and information
         wdir = ut.model_dir + f'/Models/Models_{model_type}'
-        fname = f'/{name}_space-{atlas.name}_K-{K}'
+        fname = f'/{name}_space-{this_space}_K-{K}'
 
         if this_sess is not None:
             return wdir, fname, info, models
 
         if subj_list is not None:
             wdir = ut.model_dir + f'/Models/Models_{model_type}/leaveNout'
-            fname = f'/{name}_space-{atlas.name}_K-{K}'
+            fname = f'/{name}_space-{this_space}_K-{K}'
 
             toc = time.perf_counter()
             print(f'Done Model fitting - {mname}. Used {toc - tic:0.4f} seconds!')

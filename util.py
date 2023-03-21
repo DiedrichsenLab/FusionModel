@@ -16,7 +16,7 @@ import FusionModel.hierarchical_clustering as cl
 
 # Set directories for the entire project - just set here and import everywhere
 # else
-model_dir = 'Y:\data\Cerebellum\ProbabilisticParcellationModel'
+model_dir = 'Y:/data/Cortex/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():

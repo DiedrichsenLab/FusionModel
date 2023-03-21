@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Evaluation on the parcellations learned by smoothed data
+Evaluation on the parcellations learned by smoothed data (cerebellum)
 
 Created on 2/24/2023 at 1:25 PM
 Author: dzhi
@@ -222,6 +222,27 @@ def plot_smooth_vs_unsmooth(D, test_s=0):
     plt.tight_layout()
     plt.show()
 
+def compare_diff_smooth(D, mt='03', save=False):
+    res_plot = D.loc[D.model_type==f'Models_{mt}']
+
+    # 1. Plot evaluation results
+    plt.figure(figsize=(15, 5))
+    crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
+    for i, c in enumerate(crits):
+        plt.subplot(1, 3, i + 1)
+        result = pd.pivot_table(res_plot, values=c, index='train_smooth', columns='test_smooth')
+        rdgn = sb.color_palette("vlag", as_cmap=True)
+        # rdgn = sb.color_palette("Spectral", as_cmap=True)
+        sb.heatmap(result, annot=True, cmap=rdgn, fmt='.2g')
+        plt.title(c)
+
+    plt.suptitle(f'Simulation 4, different region signal strength, iter=100')
+    plt.tight_layout()
+
+    if save:
+        plt.savefig('diff_Ktrue20_Kfit5to40.pdf', format='pdf')
+    plt.show()
+
 def plot_smooth_map(K=40, model_type='03', sess='ses-s1'):
     fname = [f'/Models_{model_type}/smoothed/asym_Md_space-MNISymC3_K-{K}_smooth-0_{sess}',
              f'/Models_{model_type}/smoothed/asym_Md_space-MNISymC3_K-{K}_smooth-1_{sess}',
@@ -263,16 +284,17 @@ def make_all_in_one_tsv(path, out_name):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    fit_smooth(smooth=[None], model_type='03')
-    fit_smooth(smooth=[None], model_type='04')
+    # fit_smooth(smooth=[None], model_type='03')
+    # fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
-    eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
+    # eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
 
     ############# Plotting comparison #############
     fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_smooth_vs_unsmooth(D, test_s=0)
+    # plot_smooth_vs_unsmooth(D, test_s=7)
+    compare_diff_smooth(D)
 
     ############# Plot fusion atlas #############
     # Making color map
