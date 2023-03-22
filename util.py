@@ -13,14 +13,15 @@ import generativeMRF.full_model as fm
 from pathlib import Path
 import FusionModel.similarity_colormap as sc
 import FusionModel.hierarchical_clustering as cl
+import nitools as nt
 
 # Set directories for the entire project - just set here and import everywhere
 # else
 model_dir = 'Y:/data/Cortex/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
-    model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
+    model_dir = '/srv/diedrichsen/data/Cortex/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
-    model_dir = '/Volumes/diedrichsen_data$/data/Cerebellum/ProbabilisticParcellationModel'
+    model_dir = '/Volumes/diedrichsen_data$/data/Cortex/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/Users/callithrix/Documents/Projects/Functional_Fusion/'
 if not Path(model_dir).exists():
@@ -186,6 +187,28 @@ def get_cmap(mname, load_best=True, sym=False):
     cmap = sc.colormap_mds(W, target=(m, regions, colors), clusters=None, gamma=0.3)
 
     return cmap.colors
+
+def write_model_to_labelcifti(mname, load_best=True, sym=False,
+                              device='cuda'):
+    # Get model and atlas.
+    fileparts = mname.split('/')
+    split_mn = fileparts[-1].split('_')
+
+    if load_best:
+        info, model = load_batch_best(mname, device=device)
+        atlas, _ = am.get_atlas(info.atlas, atlas_dir)
+    else:
+        info, model = load_batch_fit(mname)
+        atlas, _ = am.get_atlas(info.atlas[0], atlas_dir)
+
+    if not isinstance(model, list):
+        model = [model]
+
+    # Get winner-take all parcels
+    Prob = np.stack([m.marginal_prob().cpu().numpy() for m in model])
+    parcel = Prob.argmax(axis=1) + 1
+    img = nt.make_label_cifti(parcel.T, atlas.get_brain_model_axis())
+    nb.save(img, model_dir + f'/Models/{mname}.dlabel.nii')
 
 def plot_data_flat(data, atlas,
                    cmap=None,
@@ -580,3 +603,88 @@ def similarity_between_datasets(base_dir, dataset_name, atlas='MNISymC3',
                                         subtract_mean=subtract_mean)
         Rel.append(np.nanmean(r, axis=0))
     return np.stack(Rel)
+
+# def make_label_cifti(data,
+#                      anatomical_struct='Cerebellum',
+#                      labels=None,
+#                      label_names=None,
+#                      column_names=None,
+#                      label_RGBA=None):
+#     """Generates a label Cifti2Image from a numpy array
+#
+#     Args:
+#         data (np.array):
+#              num_vert x num_col data
+#         anatomical_struct (string):
+#             Anatomical Structure for the Meta-data default= 'Cerebellum'
+#         labels (list): Numerical values in data indicating the labels -
+#             defaults to np.unique(data)
+#         label_names (list):
+#             List of strings for names for labels
+#         column_names (list):
+#             List of strings for names for columns
+#         label_RGBA (list):
+#             List of rgba vectors for labels
+#     Returns:
+#         gifti (GiftiImage): Label gifti image
+#
+#     """
+#     num_verts, num_cols = data.shape
+#     if labels is None:
+#         labels = np.unique(data)
+#     num_labels = len(labels)
+#
+#     # Create naming and coloring if not specified in varargin
+#     # Make columnNames if empty
+#     if column_names is None:
+#         column_names = []
+#         for i in range(num_cols):
+#             column_names.append("col_{:02d}".format(i+1))
+#
+#     # Determine color scale if empty
+#     if label_RGBA is None:
+#         label_RGBA = np.zeros([num_labels,4])
+#         hsv = plt.cm.get_cmap('hsv',num_labels)
+#         color = hsv(np.linspace(0,1,num_labels))
+#         # Shuffle the order so that colors are more visible
+#         color = color[np.random.permutation(num_labels)]
+#         for i in range(num_labels):
+#             label_RGBA[i] = color[i]
+#
+#     # Create label names from numerical values
+#     if label_names is None:
+#         label_names = []
+#         for i in labels:
+#             label_names.append("label-{:02d}".format(i))
+#
+#     # Create label.gii structure
+#     C = nb.gifti.GiftiMetaData.from_dict({
+#         'AnatomicalStructurePrimary': anatomical_struct,
+#         'encoding': 'XML_BASE64_GZIP'})
+#
+#     E_all = []
+#     for (label, rgba, name) in zip(labels, label_RGBA, label_names):
+#         E = nb.gifti.gifti.GiftiLabel()
+#         E.key = label
+#         E.label= name
+#         E.red = rgba[0]
+#         E.green = rgba[1]
+#         E.blue = rgba[2]
+#         E.alpha = rgba[3]
+#         E.rgba = rgba[:]
+#         E_all.append(E)
+#
+#     D = list()
+#     for i in range(num_cols):
+#         d = nb.gifti.GiftiDataArray(
+#             data=np.float32(data[:, i]),
+#             intent='NIFTI_INTENT_LABEL',
+#             datatype='NIFTI_TYPE_UINT8',
+#             meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
+#         )
+#         D.append(d)
+#
+#     # Make and return the gifti file
+#     gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
+#     gifti.labeltable.labels.extend(E_all)
+#     return gifti

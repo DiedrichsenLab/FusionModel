@@ -44,6 +44,7 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
         data, cond_vec, part_vec, subj_ind
     """
     n_sets = len(datasets)
+    hemis_dict = {'L': 'cortex_left', 'R': 'cortex_right'}
     this_at, _ = am.get_atlas(atlas, ut.atlas_dir)
     data, cond_vec, part_vec, subj_ind = [],[],[],[]
 
@@ -64,7 +65,7 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
                                     atlas=atlas, sess=sess[i],
                                     type=type[i], smooth=smooth)
         if hemis is not None:
-            stru_idx = this_at.structure.index(hemis)
+            stru_idx = this_at.structure.index(hemis_dict[hemis])
             dat = dat[:,:,this_at.indx_full[stru_idx]]
         # Sub-index the subjects:
         if subj is not None:
@@ -207,9 +208,9 @@ def batch_fit(datasets, sess,
 
     # Load all necessary data and designs
     n_sets = len(data)
-    if hemis == 'cortex_left':
+    if hemis == 'L':
         atlas, _ = am.get_atlas('fs32k_L', ut.atlas_dir)
-    elif hemis == 'cortex_right':
+    elif hemis == 'R':
         atlas, _ = am.get_atlas('fs32k_R', ut.atlas_dir)
 
     print(f'Building fullMultiModel {arrange} + {emission} for fitting...')
@@ -316,9 +317,9 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
 
     hemis = None
     this_space = space
-    if space.startswith('fs32k-'):
-        hemis = space.split('-')[1]
-        space = space.split('-')[0]
+    if space.startswith('fs32k_'):
+        hemis = space.split('_')[1]
+        space = space.split('_')[0]
 
     atlas, _ = am.get_atlas(space, ut.atlas_dir)
 

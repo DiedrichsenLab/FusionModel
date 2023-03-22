@@ -61,30 +61,6 @@ if not Path(base_dir).exists():
 atlas_dir = base_dir + f'/Atlases'
 res_dir = model_dir + f'/Results' + '/5.all_datasets_fusion'
 
-def get_cmap(mname, load_best=True, sym=False):
-    # Get model and atlas.
-    fileparts = mname.split('/')
-    split_mn = fileparts[-1].split('_')
-    if load_best:
-        info, model = load_batch_best(mname)
-    else:
-        info, model = load_batch_fit(mname)
-    atlas, ainf = am.get_atlas(info.atlas, atlas_dir)
-
-    # Get winner-take all parcels
-    Prob = np.array(model.marginal_prob())
-    parcel = Prob.argmax(axis=0) + 1
-
-    # Get parcel similarity:
-    w_cos_sim, _, _ = cl.parcel_similarity(model, plot=False, sym=sym)
-    W = sc.calc_mds(w_cos_sim, center=True)
-
-    # Define color anchors
-    m, regions, colors = sc.get_target_points(atlas, parcel)
-    cmap = sc.colormap_mds(W, target=(m, regions, colors), clusters=None, gamma=0.3)
-
-    return cmap.colors
-
 def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                   out_name=None, add_zero=False):
     """Evaluate group and individual DCBC and coserr of IBC single
@@ -393,12 +369,12 @@ def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    for i in [6,5,4,3,2,1,0]:
-        datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
-        datasets_list.remove(i)
-        print(datasets_list)
-        fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
-                         sym_type=['asym'], model_type=['03'], space='MNISymC3')
+    # for i in [6,5,4,3,2,1,0]:
+    #     datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
+    #     datasets_list.remove(i)
+    #     print(datasets_list)
+    #     fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
+    #                      sym_type=['asym'], model_type=['03'], space='MNISymC3')
 
     ############# Evaluating models (on task) #############
     # model_type = ['03', '04']
@@ -480,12 +456,12 @@ if __name__ == "__main__":
 
     ############# Plot fusion atlas #############
     # Making color map
-    # K = [34]
-    # model_type = ['03']
-    # # fname = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34',
-    # #          f'/Models_03/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-34',
-    # #          f'/Models_03/asym_Hc_space-MNISymC3_K-34']
-    # colors = get_cmap(f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-34_hcpOdd')
+    K = [34]
+    model_type = ['03']
+    # fname = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34',
+    #          f'/Models_03/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-34',
+    #          f'/Models_03/asym_Hc_space-MNISymC3_K-34']
+    colors = ut.get_cmap(f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-34_hcpOdd')
     # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     # results = pd.DataFrame()
     # model_name = []

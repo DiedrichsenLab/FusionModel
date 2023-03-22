@@ -6,36 +6,34 @@ Evaluation on the parcellations learned by smoothed data (cortex)
 Created on 3/21/2023 at 10:59 AM
 Author: dzhi
 """
-from time import gmtime
+# System import
+import sys
 from pathlib import Path
-import pandas as pd
+
+# Basic libraries import
+import pickle
 import numpy as np
-import Functional_Fusion.atlas_map as am
-import Functional_Fusion.matrix as matrix
-from Functional_Fusion.dataset import *
+import torch as pt
+import seaborn as sb
+import pandas as pd
+import nibabel as nb
+import matplotlib.pyplot as plt
+
+# Modeling import
 import generativeMRF.emissions as em
 import generativeMRF.arrangements as ar
 import generativeMRF.full_model as fm
 import generativeMRF.evaluation as ev
 
-from scipy.linalg import block_diag
-import nibabel as nb
-import SUITPy as suit
-import torch as pt
-import matplotlib.pyplot as plt
-import matplotlib
-import seaborn as sb
-import sys
-import time
-import pickle
-from copy import copy,deepcopy
-from itertools import combinations
-from FusionModel.util import *
+# Dataset fusion import
+import Functional_Fusion.atlas_map as am
+from Functional_Fusion.dataset import *
+import FusionModel.util as ut
 from FusionModel.evaluate import *
 from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
-# pt.cuda.is_available = lambda : False
+pt.cuda.is_available = lambda : False
 pt.set_default_tensor_type(pt.cuda.FloatTensor
                            if pt.cuda.is_available() else
                            pt.FloatTensor)
@@ -70,7 +68,7 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
         for k in K:
             for s in smooth:
                 wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
-                                                    repeats=2,
+                                                    repeats=50,
                                                     model_type=model_type,
                                                     sym_type=sym_type,
                                                     this_sess=[[indv_sess]],
@@ -137,12 +135,21 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
 
 
 if __name__ == "__main__":
-    ############# Fitting models #############
+    ############# Fitting cortical models #############
+    # 1. fit symmetric
     # fit_smooth(K=[100], smooth=[None], model_type='03',sym_type=['sym'], space='fs32k')
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
-    fit_smooth(K=[100], smooth=[None], model_type='03', sym_type=['asym'],
-               space='fs32k-cortex_left')
+    # 2. fit asymmetric per hemisphere
+    for mt in ['03','04']:
+        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+                   space='fs32k_L')
+        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+                   space='fs32k_R')
+
+    ############# Convert fitted model to label cifti #############
+    # fname = 'Models_03/sym_Md_space-fs32k_K-10_ses-s1'
+    # ut.write_model_to_labelcifti(fname, load_best=True, device='cpu')
 
     ############# Evaluating models #############
     # eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
