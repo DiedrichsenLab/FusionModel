@@ -117,7 +117,7 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
         parcels (np.ndarray): the input parcellation:
             either group parcellation (1-dimensional: P)
             individual parcellation (num_subj x P )
-        dist (<AtlasVolumetric>): the class object of atlas
+        dist (pt.Tensor): the distance metric
         testdata (np.ndarray): the functional test dataset,
                                 shape (num_sub, N, P)
         trim_nan (boolean): if true, make the nan voxel label will be
@@ -127,9 +127,10 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
     Returns:
         dcbc_values (np.ndarray): the DCBC values of subjects
     """
-    if trim_nan:  # mask the nan voxel pairs distance to nan
-        dist[pt.where(pt.isnan(parcels))[0], :] = pt.nan
-        dist[:, pt.where(pt.isnan(parcels))[0]] = pt.nan
+    if trim_nan:
+        # mask the nan voxel pairs distance to nan for non-sparse tensor
+        dist[pt.where(pt.isnan(parcels))[0], :] = 0
+        dist[:, pt.where(pt.isnan(parcels))[0]] = 0
 
     dcbc_values, within, between = [], [], []
     for sub in range(testdata.shape[0]):
@@ -362,7 +363,7 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
     return results
 
 
-def run_dcbc(model_names, train_data, test_data, atlas, cond_vec, part_vec,
+def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
              device=None, load_best=True, verbose=True, same_subj=False):
     """ Calculates DCBC using a test_data set. The test data splitted into
         individual training and test set given by `train_indx` and `test_indx`.
@@ -374,15 +375,19 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec, part_vec,
     Args:
         model_names (list or str): Name of model fit (tsv/pickle file)
         tdata (pt.Tensor or np.ndarray): test data set
-        atlas (atlas_map): The atlas map object for calculating voxel distance
-        train_indx (ndarray of index or boolean mask): index of individual
-            training data
-        test_indx (ndarray or index boolean mask): index of individual test
-            data
+        train_data (np.ndarray or pt.Tensor): individual training data
+        test_data (np.ndarray or pt.Tensor): individual test data
+        dist (pt.Tensor or sparse tensor): distance metric
         cond_vec (1d array): the condition vector in test-data info
         part_vec (1d array): partition vector in test-data info
         device (str): the device name to load trained model
         load_best (str): I don't know
+        verbose (boolean): report cuda memory usage
+        same_subj (boolean): If True, the given individual training data
+            matches the data used for input fitted model, meaning they
+            are from the same subjects and the individual parcellation.
+            Otherwise, the invididual train/test data are from other
+            datasets with different subjects from the fitted model.
     Returns:
         data-frame with model evalution of both group and individual DCBC
     Notes:
@@ -390,8 +395,6 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec, part_vec,
         in general case (not include IBC two sessions evaluation senario)
         requested by Jorn.
     """
-    # Calculate distance metric given by input atlas
-    dist = compute_dist(atlas.world.T, resolution=1)
     # convert tdata to tensor
     if type(train_data) is np.ndarray:
         train_data = pt.tensor(train_data, dtype=pt.get_default_dtype())
@@ -451,6 +454,11 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec, part_vec,
         Pgroup = pt.argmax(Prop, dim=0) + 1
         Pindiv = pt.argmax(U_indiv, dim=1) + 1
         Pindiv_em = pt.argmax(U_indiv_em, dim=1) + 1
+
+        # Release cuda cache for saving memory
+        del emloglik, Prop, U_indiv, U_indiv_em
+        pt.cuda.empty_cache()
+
         dcbc_group = calc_test_dcbc(Pgroup, test_data, dist)
         dcbc_indiv = calc_test_dcbc(Pindiv, test_data, dist)
         dcbc_indiv_em = calc_test_dcbc(Pindiv_em, test_data, dist)

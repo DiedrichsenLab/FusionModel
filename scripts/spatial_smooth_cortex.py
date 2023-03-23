@@ -18,6 +18,7 @@ import seaborn as sb
 import pandas as pd
 import nibabel as nb
 import matplotlib.pyplot as plt
+import scipy.io as spio
 
 # Modeling import
 import generativeMRF.emissions as em
@@ -33,7 +34,7 @@ from FusionModel.evaluate import *
 from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
-pt.cuda.is_available = lambda : False
+# pt.cuda.is_available = lambda : False
 pt.set_default_tensor_type(pt.cuda.FloatTensor
                            if pt.cuda.is_available() else
                            pt.FloatTensor)
@@ -86,7 +87,7 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                 with open(wdir + fname + '.pickle', 'wb') as file:
                     pickle.dump(models, file)
 
-def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
+def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses-s1',
                   test_ses='ses-s2', train_smooth=None, test_smooth=None):
     """Evaluate group and individual DCBC and coserr of IBC single
        sessions on all other test datasets.
@@ -99,31 +100,29 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
         model_name = [model_name]
 
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
-    atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
+    atlas, info = am.get_atlas(space, atlas_dir=base_dir + '/Atlases')
     results = pd.DataFrame()
     # Evaluate all single sessions on other datasets
     for ds in t_datasets:
         print(f'Testdata: {ds}\n')
         # Preparing atlas, cond_vec, part_vec
         this_type = T.loc[T.name == ds]['default_type'].item()
-        # train_dat = fMRI_Dataset(base_dir, ds, atlas='MNISymC3',
-        #                          sess=[train_ses], type=this_type,
-        #                          smooth=None if train_smooth==2 else train_smooth)
-        # dataloader = DataLoader(train_dat, batch_size=5, shuffle=True, num_workers=0,
-        #                         drop_last=False)
-        train_dat, train_inf, train_tds = get_dataset(base_dir, ds, atlas='MNISymC3',
+        train_dat, train_inf, train_tds = get_dataset(base_dir, ds, atlas=space,
                                                       sess=[train_ses], type=this_type,
-                                                      smooth=None if train_smooth==2 else train_smooth)
-        test_dat, _, _ = get_dataset(base_dir, ds, atlas='MNISymC3',
-                                     sess=[test_ses], type=this_type,
-                                     smooth=None if test_smooth==2 else test_smooth)
+                                                      smooth=None if train_smooth==0 else
+                                                      train_smooth)
+        test_dat, _, _ = get_dataset(base_dir, ds, atlas=space, sess=[test_ses],
+                                     type=this_type, smooth=None if test_smooth==0 else test_smooth)
 
         cond_vec = train_inf[train_tds.cond_ind].values.reshape(-1, ) # default from dataset class
         part_vec = train_inf['half'].values
 
-        # 1. Run DCBC individual
-        res_dcbc = run_dcbc(model_name, train_dat, test_dat, atlas,
-                            cond_vec, part_vec, device='cuda', same_subj=True)
+        # Calculate distance metric given by input atlas
+        dist = ut.load_fs32k_dist(file_type='distGOD_sp', hemis='full',
+                                  device='cuda' if pt.cuda.is_available() else 'cpu')
+        res_dcbc = run_dcbc(model_name, train_dat, test_dat, dist, cond_vec, part_vec,
+                            device='cuda' if pt.cuda.is_available() else 'cpu',
+                            same_subj=True)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
         res_dcbc['test_ses'] = test_ses
@@ -133,26 +132,51 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
 
     return results
 
+def eval_smoothed_models(K=[100], model_type=['03','04'],
+                         smooth=[0,1,2,3,7], outname='K-10to100_Md_on_Sess_smooth'):
+    CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
+    D = pd.DataFrame()
+    for (train_ses, test_ses) in CV_setting:
+        for t in smooth:
+            for s in smooth:
+                model_name = []
+                if s != 0:
+                    model_name += [f'Models_{mt}/sym_Md_space-fs32k_K-{this_k}_smooth-{s}_' \
+                                   f'{train_ses}' for this_k in K for mt in model_type]
+                else:
+                    model_name += [f'Models_{mt}/sym_Md_space-fs32k_K-{this_k}_{train_ses}'
+                                   for this_k in K for mt in model_type]
+
+                results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
+                                        test_ses=test_ses, train_smooth=s, test_smooth=t)
+                D = pd.concat([D, results], ignore_index=True)
+
+    # Save file
+    wdir = model_dir + f'/Models/Evaluation'
+    fname = f'/eval_all_asym_{outname}.tsv'
+    D.to_csv(wdir + fname, index=False, sep='\t')
+
 
 if __name__ == "__main__":
     ############# Fitting cortical models #############
-    # 1. fit symmetric
-    # fit_smooth(K=[100], smooth=[None], model_type='03',sym_type=['sym'], space='fs32k')
+    # 1. fit whole cortex (using symmetric arrangement)
+    fit_smooth(K=[100], smooth=[1], model_type='03',sym_type=['sym'], space='fs32k')
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
-    # 2. fit asymmetric per hemisphere
-    for mt in ['03','04']:
-        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-                   space='fs32k_L')
-        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-                   space='fs32k_R')
+    # 2. fit single hemisphere (using asymmetric arrangement)
+    # for mt in ['03','04']:
+    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+    #                space='fs32k_L')
+    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+    #                space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
     # fname = 'Models_03/sym_Md_space-fs32k_K-10_ses-s1'
     # ut.write_model_to_labelcifti(fname, load_best=True, device='cpu')
 
     ############# Evaluating models #############
-    # eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
+    eval_smoothed_models(model_type=['03'], smooth=[0],
+                         outname='K-10to100_Md_on_Sess_smooth')
 
     ############# Plotting comparison #############
     # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'

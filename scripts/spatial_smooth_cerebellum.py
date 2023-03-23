@@ -13,7 +13,6 @@ import numpy as np
 import Functional_Fusion.atlas_map as am
 import Functional_Fusion.matrix as matrix
 from Functional_Fusion.dataset import *
-import generativeMRF.emissions as em
 import generativeMRF.arrangements as ar
 import generativeMRF.full_model as fm
 import generativeMRF.evaluation as ev
@@ -124,7 +123,8 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
         part_vec = train_inf['half'].values
 
         # 1. Run DCBC individual
-        res_dcbc = run_dcbc(model_name, train_dat, test_dat, atlas,
+        dist = compute_dist(atlas.world.T, resolution=1)
+        res_dcbc = run_dcbc(model_name, train_dat, test_dat, dist,
                             cond_vec, part_vec, device='cuda', same_subj=True)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
@@ -236,7 +236,7 @@ def compare_diff_smooth(D, mt='03', save=False):
         sb.heatmap(result, annot=True, cmap=rdgn, fmt='.2g')
         plt.title(c)
 
-    plt.suptitle(f'Simulation 4, different region signal strength, iter=100')
+    plt.suptitle(f'Spatial smoothness')
     plt.tight_layout()
 
     if save:
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     # fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
-    # eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
+    eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
 
     ############# Plotting comparison #############
     fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'

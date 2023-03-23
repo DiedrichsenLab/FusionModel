@@ -14,6 +14,8 @@ from pathlib import Path
 import FusionModel.similarity_colormap as sc
 import FusionModel.hierarchical_clustering as cl
 import nitools as nt
+import scipy.io as spio
+from scipy.sparse import block_diag
 
 # Set directories for the entire project - just set here and import everywhere
 # else
@@ -133,7 +135,6 @@ def move_batch_to_device(fname, device='cpu'):
     with open(wdir + fname + '.pickle', 'wb') as file:
         pickle.dump(models, file)
 
-
 def load_batch_best(fname, device=None):
     """ Loads a batch of model fits and selects the best one
     Args:
@@ -150,6 +151,36 @@ def load_batch_best(fname, device=None):
     info_reduced = info.iloc[j]
     return info_reduced, best_model
 
+def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
+                    device='cuda'):
+    # Load distance metric of vertices pairs in fs32k template
+    atlas, info = am.get_atlas('fs32k', atlas_dir=base_dir + '/Atlases')
+    dist = spio.loadmat(base_dir + '/Atlases/{0}'.format(info['dir'])
+                        + f'/{file_type}.mat')
+    dist = dist['avrgDs']
+
+    # Remove medial wall if applied
+    if remove_mw:
+        dist = dist[:, atlas.vertex[0]][atlas.vertex[0], :]
+
+    # Concatenate both hemispheres if `full`
+    if hemis == 'full':
+        dist = block_diag((dist, dist))
+    elif hemis == 'half':
+        pass
+    else:
+        raise ValueError('Unknown input `hemis`, please specify whether '
+                         'the distances are calculated for single hemisphere'
+                         'or whole cortex!')
+
+    # Convert the numpy sparse matrix to a PyTorch sparse tensor
+    coo_matrix = dist.tocoo()
+    indices = pt.LongTensor(np.vstack((coo_matrix.row, coo_matrix.col)))
+    values = pt.FloatTensor(coo_matrix.data)
+    shape = coo_matrix.shape
+    sparse_tensor = pt.sparse_coo_tensor(indices, values, pt.Size(shape))
+
+    return sparse_tensor.to(device=device)
 
 def get_colormap_from_lut(fname=base_dir + '/Atlases/tpl-SUIT/atl-MDTB10.lut'):
     """ Makes a color map from a *.lut file
@@ -472,12 +503,12 @@ def compute_DCBC(maxDist=35, binWidth=1, parcellation=np.empty([]),
     numBins = int(np.floor(maxDist / binWidth))
     cov, var = compute_var_cov(func)
     # cor = np.corrcoef(func)
+    if not dist.is_sparse:
+        dist = dist.to_sparse()
 
-    # remove the nan value and medial wall from dist file
-    dist = dist.to_sparse()
-    row = dist.indices()[0]
-    col = dist.indices()[1]
-    distance = dist.values()
+    row = dist._indices()[0]
+    col = dist._indices()[1]
+    distance = dist._values()
     # row, col, distance = sp.sparse.find(dist)
 
     # making parcellation matrix without medial wall and nan value

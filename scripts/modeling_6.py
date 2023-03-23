@@ -133,8 +133,9 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                 train_part_vec = part_vec[train_indx]
 
             # 1. Run DCBC individual
+            dist = compute_dist(atlas.world.T, resolution=1)
             res_dcbc = run_dcbc(model_name, train_dat,
-                                test_dat, atlas,
+                                test_dat, dist,
                                 cond_vec=train_cond_vec,
                                 part_vec=train_part_vec,
                                 device='cuda')
