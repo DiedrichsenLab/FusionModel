@@ -142,14 +142,20 @@ def eval_smoothed_models(K=[10,17,20,34,40,68,100], model_type=['03','04'],
     for (train_ses, test_ses) in CV_setting:
         for t in smooth:
             for s in smooth:
-                model_name = []
-                if s != 2:
-                    model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
-                                   f'{this_k}_smooth-{s}_{train_ses}'
+                #### Option 1: the group prior was trained all from unsmoothed data
+                model_name = [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
+                                   f'{this_k}_smooth-0_{train_ses}'
                                    for this_k in K for mt in model_type]
-                else:
-                    model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
-                                   for this_k in K for mt in model_type]
+                #### Option 2: the group prior was trained on the same smoothing level
+                #### that we used for individual training
+                # model_name = []
+                # if s != 2:
+                #     model_name += [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
+                #                    f'{this_k}_smooth-{s}_{train_ses}'
+                #                    for this_k in K for mt in model_type]
+                # else:
+                #     model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
+                #                    for this_k in K for mt in model_type]
 
                 results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
                                         test_ses=test_ses, train_smooth=s, test_smooth=t)
@@ -222,21 +228,25 @@ def plot_smooth_vs_unsmooth(D, test_s=0):
     plt.tight_layout()
     plt.show()
 
-def compare_diff_smooth(D, mt='03', save=False):
+def compare_diff_smooth(D, mt='03', outname='MDTB_sess', save=False):
     res_plot = D.loc[D.model_type==f'Models_{mt}']
 
     # 1. Plot evaluation results
-    plt.figure(figsize=(15, 5))
+    plt.figure(figsize=(15, 10))
     crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
     for i, c in enumerate(crits):
-        plt.subplot(1, 3, i + 1)
+        plt.subplot(2, 3, i + 1)
         result = pd.pivot_table(res_plot, values=c, index='train_smooth', columns='test_smooth')
         rdgn = sb.color_palette("vlag", as_cmap=True)
         # rdgn = sb.color_palette("Spectral", as_cmap=True)
         sb.heatmap(result, annot=True, cmap=rdgn, fmt='.2g')
         plt.title(c)
 
-    plt.suptitle(f'Spatial smoothness')
+        plt.subplot(2, 3, i + 4)
+        sb.lineplot(data=res_plot, x='train_smooth', y=c, hue='test_smooth',
+                    errorbar='se', err_style="bars", markers=False)
+
+    plt.suptitle(f'Spatial smoothness - model type {mt} - {outname}')
     plt.tight_layout()
 
     if save:
@@ -288,13 +298,13 @@ if __name__ == "__main__":
     # fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
-    eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth')
+    # eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth_groupTrain0')
 
     ############# Plotting comparison #############
-    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth_groupTrain0.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
     # plot_smooth_vs_unsmooth(D, test_s=7)
-    compare_diff_smooth(D)
+    compare_diff_smooth(D, mt='03', outname='MDTB_sess_groupTrain_0')
 
     ############# Plot fusion atlas #############
     # Making color map
