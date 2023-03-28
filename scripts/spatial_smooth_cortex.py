@@ -34,7 +34,7 @@ from FusionModel.evaluate import *
 from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
-# pt.cuda.is_available = lambda : False
+pt.cuda.is_available = lambda : False
 pt.set_default_tensor_type(pt.cuda.FloatTensor
                            if pt.cuda.is_available() else
                            pt.FloatTensor)
@@ -99,11 +99,26 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
     if not isinstance(model_name, list):
         model_name = [model_name]
 
+    space_sp = space.split('_')
+    if len(space_sp) == 1:
+        hemis = 'full'
+        atlas, _ = am.get_atlas(space, atlas_dir=base_dir + '/Atlases')
+        vert_indx = np.arange(0,atlas.P)
+    elif len(space_sp) == 2:
+        hemis = 'half'
+        space = space_sp[0]
+        hem = space_sp[1]
+        hemis_dict = {'L': 'cortex_left', 'R': 'cortex_right'}
+        atlas, _ = am.get_atlas(space, atlas_dir=base_dir + '/Atlases')
+        stru_idx = atlas.structure.index(hemis_dict[hem])
+        vert_indx = atlas.indx_full[stru_idx]
+    else:
+        raise NameError('Unrecognized `space` for atlasing!')
+
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
-    atlas, info = am.get_atlas(space, atlas_dir=base_dir + '/Atlases')
     results = pd.DataFrame()
-    # Evaluate all single sessions on other datasets
     for ds in t_datasets:
+        # Evaluate all single sessions on other datasets
         print(f'Testdata: {ds}\n')
         # Preparing atlas, cond_vec, part_vec
         this_type = T.loc[T.name == ds]['default_type'].item()
@@ -118,11 +133,11 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
         part_vec = train_inf['half'].values
 
         # Calculate distance metric given by input atlas
-        dist = ut.load_fs32k_dist(file_type='distGOD_sp', hemis='full',
+        dist = ut.load_fs32k_dist(file_type='distGOD_sp', hemis=hemis,
                                   device='cuda' if pt.cuda.is_available() else 'cpu')
-        res_dcbc = run_dcbc(model_name, train_dat, test_dat, dist, cond_vec, part_vec,
-                            device='cuda' if pt.cuda.is_available() else 'cpu',
-                            same_subj=True)
+        res_dcbc = run_dcbc(model_name, train_dat[:,:,vert_indx], test_dat[:,:,vert_indx], dist,
+                            cond_vec, part_vec, device='cuda' if pt.cuda.is_available() else 'cpu',
+                            same_subj=False)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
         res_dcbc['test_ses'] = test_ses
@@ -132,35 +147,79 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
 
     return results
 
-def eval_smoothed_models(K=[100], model_type=['03','04'],
-                         smooth=[0,1,2,3,7], outname='K-10to100_Md_on_Sess_smooth'):
+def eval_smoothed_models(K=[100], model_type=['03','04'], space='fs32k', sym='asym',
+                         smooth=[0,1,2,3,7], outname='asym_K-10to100_Md_on_Sess_smooth'):
     CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
     D = pd.DataFrame()
     for (train_ses, test_ses) in CV_setting:
         for t in smooth:
             for s in smooth:
-                model_name = []
-                if s != 0:
-                    model_name += [f'Models_{mt}/sym_Md_space-fs32k_K-{this_k}_smooth-{s}_' \
-                                   f'{train_ses}' for this_k in K for mt in model_type]
-                else:
-                    model_name += [f'Models_{mt}/sym_Md_space-fs32k_K-{this_k}_{train_ses}'
-                                   for this_k in K for mt in model_type]
+                #### Option 1: the group prior was trained all from unsmoothed data
+                model_name = [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
+                              for this_k in K for mt in model_type]
+                #### Option 2: the group prior was trained on the same smoothing level
+                #### that we used for individual training
+                # model_name = []
+                # if s != 0:
+                #     model_name += [f'Models_{mt}/smoothed/{sym}_Md_space-{space}_K-{this_k}_smooth' \
+                #                    f'-{s}_{train_ses}' for this_k in K for mt in model_type]
+                # else:
+                #     model_name += [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
+                #                    for this_k in K for mt in model_type]
 
-                results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
-                                        test_ses=test_ses, train_smooth=s, test_smooth=t)
+                results = eval_smoothed(model_name, space=space, t_datasets=['MDTB'],
+                                        train_ses=train_ses, test_ses=test_ses,
+                                        train_smooth=s, test_smooth=t)
                 D = pd.concat([D, results], ignore_index=True)
 
     # Save file
     wdir = model_dir + f'/Models/Evaluation'
-    fname = f'/eval_all_asym_{outname}.tsv'
+    fname = f'/eval_all_{outname}.tsv'
     D.to_csv(wdir + fname, index=False, sep='\t')
 
+def plot_smooth_vs_unsmooth(D, test_s=0):
+    D = D.loc[D.test_smooth==test_s]
+    plt.figure(figsize=(10, 15))
+    crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
+    for i, c in enumerate(crits):
+        plt.subplot(3, 2, i*2 + 1)
+        sb.barplot(data=D, x='model_type', y=c, hue='train_smooth', errorbar="se")
+
+        # if 'coserr' in c:
+        #     plt.ylim(0.4, 1)
+        plt.subplot(3, 2, i*2 + 2)
+        sb.lineplot(data=D, x='K', y=c, hue='model_type', style="train_smooth",
+                    errorbar=None, err_style="bars", markers=False)
+
+    plt.suptitle(f'All datasets fusion')
+    plt.tight_layout()
+    plt.show()
+
+def compare_diff_smooth(D, mt='03', save=False):
+    res_plot = D.loc[D.model_type==f'Models_{mt}']
+
+    # 1. Plot evaluation results
+    plt.figure(figsize=(15, 5))
+    crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
+    for i, c in enumerate(crits):
+        plt.subplot(1, 3, i + 1)
+        result = pd.pivot_table(res_plot, values=c, index='train_smooth', columns='test_smooth')
+        rdgn = sb.color_palette("vlag", as_cmap=True)
+        # rdgn = sb.color_palette("Spectral", as_cmap=True)
+        sb.heatmap(result, annot=True, cmap=rdgn, fmt='.2g')
+        plt.title(c)
+
+    plt.suptitle(f'Spatial smoothness')
+    plt.tight_layout()
+
+    if save:
+        plt.savefig('diff_Ktrue20_Kfit5to40.pdf', format='pdf')
+    plt.show()
 
 if __name__ == "__main__":
     ############# Fitting cortical models #############
     # 1. fit whole cortex (using symmetric arrangement)
-    fit_smooth(K=[100], smooth=[1], model_type='03',sym_type=['sym'], space='fs32k')
+    # fit_smooth(K=[100], smooth=[1], model_type='03',sym_type=['sym'], space='fs32k')
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
     # 2. fit single hemisphere (using asymmetric arrangement)
@@ -171,19 +230,15 @@ if __name__ == "__main__":
     #                space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
-    # fname = 'Models_03/sym_Md_space-fs32k_K-10_ses-s1'
+    # fname = 'Models_04/smoothed/sym_Md_space-fs32k_K-34_smooth-3_ses-s1'
     # ut.write_model_to_labelcifti(fname, load_best=True, device='cpu')
 
     ############# Evaluating models #############
-    eval_smoothed_models(model_type=['03'], smooth=[0],
-                         outname='K-10to100_Md_on_Sess_smooth')
+    eval_smoothed_models(K=[17], model_type=['03','04'], space='fs32k_L', sym='asym',
+                         smooth=[0,1,2,3], outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
 
     ############# Plotting comparison #############
-    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth.tsv'
-    # D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # # plot_smooth_vs_unsmooth(D, test_s=7)
-    # compare_diff_smooth(D)
-
-    ############# Plot fusion atlas #############
-    # Making color map
-    # plot_smooth_map(K=40, model_type='03', sess='ses-s1')
+    fname = f'/Models/Evaluation/eval_all_sym_K-34_Md_on_Sess_smooth.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # plot_smooth_vs_unsmooth(D, test_s=1)
+    compare_diff_smooth(D)
