@@ -110,7 +110,7 @@ def calc_test_error(M, tdata, U_hats):
     return pred_err
 
 
-def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
+def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
                    trim_nan=False, return_wb_corr=False, verbose=True):
     """DCBC: evaluate the resultant parcellation using DCBC
     Args:
@@ -364,7 +364,7 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
 
 
 def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
-             device=None, load_best=True, verbose=True, same_subj=False):
+             device=None, return_wb=False, verbose=False, same_subj=False):
     """ Calculates DCBC using a test_data set. The test data splitted into
         individual training and test set given by `train_indx` and `test_indx`.
         First we use individual training data to derive an individual
@@ -406,17 +406,14 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
 
     num_subj = test_data.shape[0]
     results = pd.DataFrame()
+    corr_all = []
     # Now loop over possible models we want to evaluate
     for i, model_name in enumerate(model_names):
         print(f"Doing model {model_name}\n")
         if verbose:
             ut.report_cuda_memory()
-        if load_best:
-            minfo, model = load_batch_best(f"{model_name}", device=device)
-        else:
-            minfo, model = load_batch_fit(f"{model_name}")
-            minfo = minfo.iloc[0]
 
+        minfo, model = load_batch_best(f"{model_name}", device=device)
         Prop = model.marginal_prob()
         this_res = pd.DataFrame()
         if same_subj:
@@ -459,9 +456,19 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
         del emloglik, Prop, U_indiv, U_indiv_em
         pt.cuda.empty_cache()
 
-        dcbc_group = calc_test_dcbc(Pgroup, test_data, dist)
-        dcbc_indiv = calc_test_dcbc(Pindiv, test_data, dist)
-        dcbc_indiv_em = calc_test_dcbc(Pindiv_em, test_data, dist)
+        # ------------------------------------------
+        # Calculate the DCBC for group and individual
+        dcbc_group,cw1,cb1 = calc_test_dcbc(Pgroup, test_data, dist, return_wb_corr=True)
+        dcbc_indiv,cw2,cb2 = calc_test_dcbc(Pindiv, test_data, dist, return_wb_corr=True)
+        dcbc_indiv_em,cw3,cb3 = calc_test_dcbc(Pindiv_em, test_data, dist, return_wb_corr=True)
+        D = {"group_within": pt.stack(cw1).cpu().numpy(),
+             "group_between": pt.stack(cb1).cpu().numpy(),
+             "indiv_within": pt.stack(cw2).cpu().numpy(),
+             "indiv_between": pt.stack(cb2).cpu().numpy(),
+             "indiv_em_within": pt.stack(cw3).cpu().numpy(),
+             "indiv_em_between": pt.stack(cb3).cpu().numpy(),
+             "model_name": model_name}
+        corr_all.append(D)
 
         # ------------------------------------------
         # Collect the information from the evaluation
@@ -491,8 +498,10 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
             this_res['test_sess'] = 'all'
         results = pd.concat([results, this_res], ignore_index=True)
 
-    return results
-
+    if return_wb:
+        return results, corr_all
+    else:
+        return results
 
 def run_dcbc_IBC(model_names, test_data, test_sess,
                  cond_ind=None, part_ind=None,

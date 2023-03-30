@@ -429,6 +429,43 @@ def plot_model_parcel(model_names, grid, cmap='tab20b', align=False, device=None
                     cmap=cmap, dtype='prob',
                     titles=titles)
 
+def plot_corr_wb(corr, idx, type='group', max_D=35, binwidth=1, title=[]):
+    x = np.arange(0, max_D, binwidth) + binwidth/2
+    num_row = len(corr)
+    # find a maximum row number variable
+    max_col = 0
+    for row in corr:
+        # get the length of the keys in the row's sub-dictionary
+        num_col = len(corr[row])
+        # update the maximum column number if needed
+        if num_col > max_col:
+            max_col = num_col
+
+    fig, axes = plt.subplots(nrows=num_row, ncols=max_col, squeeze=False,
+                             figsize=(5*max_col, 5*num_row), sharey='row')
+
+    for i, train_smooth in enumerate(corr.keys()):
+        for j, (test_smooth, value) in enumerate(corr[train_smooth].items()):
+            cw = value[idx][f'{type}_within']
+            cb = value[idx][f'{type}_between']
+            # Calculate the mean and standard deviation across subjects for each timestamp
+            se_w = np.nanstd(cw, axis=0) / np.sqrt(cw.shape[0])
+            se_b = np.nanstd(cb, axis=0) / np.sqrt(cb.shape[0])
+
+            # Plot the mean data as a line and show the standard deviation with error bars
+            axes[i,j].errorbar(x, np.nanmean(cw, axis=0), yerr=se_w, fmt='-', c='k',
+                         capsize=1, capthick=0.5, elinewidth=0.8, label='within')
+            axes[i,j].errorbar(x, np.nanmean(cb, axis=0), yerr=se_b, fmt='-', c='r',
+                         capsize=1, capthick=0.5, elinewidth=0.8, label='between')
+
+            axes[i,j].legend()
+            axes[i,j].set_xlabel('Spatial distance (mm)')
+            axes[i,j].set_ylabel(f'Correlation - {train_smooth}')
+            axes[i,j].set_title(test_smooth)
+
+    plt.suptitle(f'W-B correlation - type:{type} of {title[idx]}')
+    plt.tight_layout()
+    plt.show()
 
 def compute_var_cov(data, cond='all', mean_centering=True):
     """

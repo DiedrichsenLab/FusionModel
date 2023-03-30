@@ -135,9 +135,10 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
         # Calculate distance metric given by input atlas
         dist = ut.load_fs32k_dist(file_type='distGOD_sp', hemis=hemis,
                                   device='cuda' if pt.cuda.is_available() else 'cpu')
-        res_dcbc = run_dcbc(model_name, train_dat[:,:,vert_indx], test_dat[:,:,vert_indx], dist,
-                            cond_vec, part_vec, device='cuda' if pt.cuda.is_available() else 'cpu',
-                            same_subj=False)
+        res_dcbc, corrs = run_dcbc(model_name, train_dat[:,:,vert_indx], test_dat[:,:,vert_indx],
+                                   dist, cond_vec, part_vec,
+                                   device='cuda' if pt.cuda.is_available() else 'cpu',
+                                   verbose=False, return_wb=True, same_subj=False)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
         res_dcbc['test_ses'] = test_ses
@@ -145,15 +146,18 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
         res_dcbc['test_smooth'] = test_smooth
         results = pd.concat([results, res_dcbc], ignore_index=True)
 
-    return results
+    return results, corrs
 
 def eval_smoothed_models(K=[100], model_type=['03','04'], space='fs32k', sym='asym',
-                         smooth=[0,1,2,3,7], outname='asym_K-10to100_Md_on_Sess_smooth'):
+                         smooth=[0,1,2,3,7], save=False, plot_wb=True,
+                         outname='asym_K-10to100_Md_on_Sess_smooth'):
     CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
     D = pd.DataFrame()
     for (train_ses, test_ses) in CV_setting:
-        for t in smooth:
-            for s in smooth:
+        dict = {}
+        for s in smooth:
+            dict_row = {}
+            for t in smooth:
                 #### Option 1: the group prior was trained all from unsmoothed data
                 model_name = [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
                               for this_k in K for mt in model_type]
@@ -167,15 +171,22 @@ def eval_smoothed_models(K=[100], model_type=['03','04'], space='fs32k', sym='as
                 #     model_name += [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
                 #                    for this_k in K for mt in model_type]
 
-                results = eval_smoothed(model_name, space=space, t_datasets=['MDTB'],
-                                        train_ses=train_ses, test_ses=test_ses,
-                                        train_smooth=s, test_smooth=t)
+                results, corrs = eval_smoothed(model_name, space=space, t_datasets=['MDTB'],
+                                               train_ses=train_ses, test_ses=test_ses,
+                                               train_smooth=s, test_smooth=t)
+                dict_row[f'test_{t}'] = corrs
                 D = pd.concat([D, results], ignore_index=True)
 
-    # Save file
-    wdir = model_dir + f'/Models/Evaluation'
-    fname = f'/eval_all_{outname}.tsv'
-    D.to_csv(wdir + fname, index=False, sep='\t')
+            dict[f'train_{s}'] = dict_row
+
+        if plot_wb:
+            plot_corr_wb(dict, 0, title=model_name)
+
+    if save:
+        # Save file
+        wdir = model_dir + f'/Models/Evaluation'
+        fname = f'/eval_all_{outname}.tsv'
+        D.to_csv(wdir + fname, index=False, sep='\t')
 
 def plot_smooth_vs_unsmooth(D, test_s=0):
     D = D.loc[D.test_smooth==test_s]
@@ -195,21 +206,25 @@ def plot_smooth_vs_unsmooth(D, test_s=0):
     plt.tight_layout()
     plt.show()
 
-def compare_diff_smooth(D, mt='03', save=False):
+def compare_diff_smooth(D, mt='03', outname='MDTB_cortex', save=False):
     res_plot = D.loc[D.model_type==f'Models_{mt}']
 
     # 1. Plot evaluation results
-    plt.figure(figsize=(15, 5))
+    plt.figure(figsize=(15, 10))
     crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
     for i, c in enumerate(crits):
-        plt.subplot(1, 3, i + 1)
+        plt.subplot(2, 3, i + 1)
         result = pd.pivot_table(res_plot, values=c, index='train_smooth', columns='test_smooth')
         rdgn = sb.color_palette("vlag", as_cmap=True)
         # rdgn = sb.color_palette("Spectral", as_cmap=True)
         sb.heatmap(result, annot=True, cmap=rdgn, fmt='.2g')
         plt.title(c)
 
-    plt.suptitle(f'Spatial smoothness')
+        plt.subplot(2, 3, i + 4)
+        sb.lineplot(data=res_plot, x='train_smooth', y=c, hue='test_smooth',
+                    errorbar='se', err_style="bars", markers=False)
+
+    plt.suptitle(f'Spatial smoothness - model type {mt} - {outname}')
     plt.tight_layout()
 
     if save:
@@ -230,15 +245,16 @@ if __name__ == "__main__":
     #                space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
-    # fname = 'Models_04/smoothed/sym_Md_space-fs32k_K-34_smooth-3_ses-s1'
-    # ut.write_model_to_labelcifti(fname, load_best=True, device='cpu')
+    # fname = 'Models_03/asym_Md_space-fs32k_L_K-17_ses-s1'
+    # ut.write_model_to_labelcifti(fname, load_best=True, sym='asym', device='cpu')
 
-    ############# Evaluating models #############
-    eval_smoothed_models(K=[17], model_type=['03','04'], space='fs32k_L', sym='asym',
-                         smooth=[0,1,2,3], outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
+    ############# Evaluating models / plot wb-curves #############
+    eval_smoothed_models(K=[17], model_type=['03'], space='fs32k_L', sym='asym',
+                         smooth=[0,1,2], save=False, plot_wb=True,
+                         outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
 
     ############# Plotting comparison #############
-    fname = f'/Models/Evaluation/eval_all_sym_K-34_Md_on_Sess_smooth.tsv'
+    fname = f'/Models/Evaluation/eval_all_asym_K-17_Md_on_Sess_smooth_groupTrain0.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_smooth_vs_unsmooth(D, test_s=1)
-    compare_diff_smooth(D)
+    # plot_smooth_vs_unsmooth(D, test_s=3)
+    compare_diff_smooth(D, mt='03')

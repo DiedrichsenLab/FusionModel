@@ -124,8 +124,8 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
 
         # 1. Run DCBC individual
         dist = compute_dist(atlas.world.T, resolution=1)
-        res_dcbc = run_dcbc(model_name, train_dat, test_dat, dist,
-                            cond_vec, part_vec, device='cuda', same_subj=True)
+        res_dcbc, corrs = run_dcbc(model_name, train_dat, test_dat, dist, cond_vec, part_vec,
+                                   device='cuda', return_wb=True, same_subj=True)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
         res_dcbc['test_ses'] = test_ses
@@ -133,15 +133,17 @@ def eval_smoothed(model_name, t_datasets=['MDTB'], train_ses='ses-s1',
         res_dcbc['test_smooth'] = test_smooth
         results = pd.concat([results, res_dcbc], ignore_index=True)
 
-    return results
+    return results, corrs
 
-def eval_smoothed_models(K=[10,17,20,34,40,68,100], model_type=['03','04'],
-                         smooth=[0,1,2,3,7], outname='K-10to100_Md_on_Sess_smooth'):
+def eval_smoothed_models(K=[10,17,20,34,40,68,100], model_type=['03','04'], smooth=[0,1,2,3,7],
+                         outname='K-10to100_Md_on_Sess_smooth', plot_wb=True):
     CV_setting = [('ses-s1', 'ses-s2'), ('ses-s2', 'ses-s1')]
     D = pd.DataFrame()
     for (train_ses, test_ses) in CV_setting:
-        for t in smooth:
-            for s in smooth:
+        dict = {}
+        for s in smooth:
+            dict_row = {}
+            for t in smooth:
                 #### Option 1: the group prior was trained all from unsmoothed data
                 model_name = [f'Models_{mt}/smoothed/asym_Md_space-MNISymC3_K-' \
                                    f'{this_k}_smooth-0_{train_ses}'
@@ -157,9 +159,15 @@ def eval_smoothed_models(K=[10,17,20,34,40,68,100], model_type=['03','04'],
                 #     model_name += [f'Models_{mt}/asym_Md_space-MNISymC3_K-{this_k}_{train_ses}'
                 #                    for this_k in K for mt in model_type]
 
-                results = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
-                                        test_ses=test_ses, train_smooth=s, test_smooth=t)
+                results, corrs = eval_smoothed(model_name, t_datasets=['MDTB'], train_ses=train_ses,
+                                               test_ses=test_ses, train_smooth=s, test_smooth=t)
+                dict_row[f'test_{t}'] = corrs
                 D = pd.concat([D, results], ignore_index=True)
+
+            dict[f'train_{s}'] = dict_row
+
+        if plot_wb:
+            plot_corr_wb(dict, 0, title=model_name)
 
     # Save file
     wdir = model_dir + f'/Models/Evaluation'
@@ -298,7 +306,8 @@ if __name__ == "__main__":
     # fit_smooth(smooth=[None], model_type='04')
 
     ############# Evaluating models #############
-    # eval_smoothed_models(outname='K-10to100_Md_on_Sess_smooth_groupTrain0')
+    eval_smoothed_models(K=[17], smooth=[0,1],
+                         outname='K-10to100_Md_on_Sess_smooth_groupTrain0')
 
     ############# Plotting comparison #############
     fname = f'/Models/Evaluation/eval_all_asym_K-10to100_Md_on_Sess_smooth_groupTrain0.tsv'
