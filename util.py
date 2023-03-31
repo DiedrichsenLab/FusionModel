@@ -16,6 +16,7 @@ import FusionModel.hierarchical_clustering as cl
 import nitools as nt
 import scipy.io as spio
 from scipy.sparse import block_diag
+import scipy.ndimage as snd
 
 # Set directories for the entire project - just set here and import everywhere
 # else
@@ -181,6 +182,55 @@ def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
     sparse_tensor = pt.sparse_coo_tensor(indices, values, pt.Size(shape))
 
     return sparse_tensor.to(device=device)
+
+def get_fs32k_weights(file_type='distGOD_sp', hemis='full', remove_mw=True,
+                      kernel='gaussian', sigma=10, device='cuda'):
+    # Load distance metric of vertices pairs in fs32k template
+    atlas, info = am.get_atlas('fs32k', atlas_dir=base_dir + '/Atlases')
+    dist = spio.loadmat(base_dir + '/Atlases/{0}'.format(info['dir'])
+                        + f'/{file_type}.mat')
+    dist = dist['avrgDs']
+
+    # Remove medial wall if applied
+    if remove_mw:
+        dist = dist[:, atlas.vertex[0]][atlas.vertex[0], :]
+
+    # Concatenate both hemispheres if `full`
+    if hemis == 'full':
+        dist = block_diag((dist, dist))
+    elif hemis == 'half':
+        pass
+    else:
+        raise ValueError('Unknown input `hemis`, please specify whether '
+                         'the distances are calculated for single hemisphere'
+                         'or whole cortex!')
+
+    # Convert the numpy sparse matrix to a PyTorch sparse tensor
+    coo_matrix = dist.tocoo()
+    indices = pt.LongTensor(np.vstack((coo_matrix.row, coo_matrix.col)))
+    sparse_tensor = pt.sparse_coo_tensor(indices,
+                                         pt.FloatTensor(coo_matrix.data),
+                                         pt.Size(coo_matrix.shape))
+
+    # create a diagonal tensor - fill by zeros
+    N = sparse_tensor.shape[0]
+    diagonal_tensor = pt.sparse_coo_tensor(np.stack([np.arange(N), np.arange(N)]),
+                                           pt.FloatTensor(np.full((N,), 0)),
+                                           pt.Size([N, N]))
+
+    # change the values of the matrix by given kernel
+    weights = sparse_tensor + diagonal_tensor
+    values = weights._values()
+    if kernel == 'gaussian':
+        values = pt.exp(-values ** 2 / (2*sigma**2))
+    else:
+        raise ValueError('Unknown kernel type! '
+                         'We currently support gaussina kernel only.')
+
+    weights = pt.sparse_coo_tensor(weights._indices(), values, weights.shape)
+
+    # Coalesce weights to remove the duplicate indices
+    return weights.coalesce().to(device=device)
 
 def get_colormap_from_lut(fname=base_dir + '/Atlases/tpl-SUIT/atl-MDTB10.lut'):
     """ Makes a color map from a *.lut file
