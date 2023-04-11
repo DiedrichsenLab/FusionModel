@@ -133,7 +133,7 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
         part_vec = train_inf['half'].values
 
         # Calculate distance metric given by input atlas
-        dist = ut.get_fs32k_weights(file_type='distAvrg_sp', hemis=hemis,
+        dist = ut.load_fs32k_dist(file_type='distAvrg_sp', hemis=hemis,
                                   device='cuda' if pt.cuda.is_available() else 'cpu')
         res_dcbc, corrs = run_dcbc(model_name, train_dat[:,:,vert_indx], test_dat[:,:,vert_indx],
                                    dist, cond_vec, part_vec,
@@ -249,12 +249,12 @@ if __name__ == "__main__":
     # ut.write_model_to_labelcifti(fname, load_best=True, sym='asym', device='cpu')
 
     ############# Evaluating models / plot wb-curves #############
-    eval_smoothed_models(K=[17], model_type=['03'], space='fs32k_L', sym='asym',
-                         smooth=[0,1,2,3], save=False, plot_wb=True,
-                         outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
+    # eval_smoothed_models(K=[17], model_type=['03'], space='fs32k_L', sym='asym',
+    #                      smooth=[0,1,2,3], save=False, plot_wb=True,
+    #                      outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
 
     ############# Plotting comparison #############
     fname = f'/Models/Evaluation/eval_all_asym_K-17_Md_on_Sess_smooth_groupTrain0.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
     # plot_smooth_vs_unsmooth(D, test_s=3)
-    compare_diff_smooth(D, mt='03')
+    compare_diff_smooth(D, mt='04')

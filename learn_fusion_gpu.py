@@ -166,7 +166,8 @@ def batch_fit(datasets, sess,
               join_sess_part=False,
               weighting=None,
               smooth=None,
-              hemis=None):
+              hemis=None,
+              second_converge=True):
     """ Executes a set of fits starting from random starting values
     selects the best one from a batch and saves them
 
@@ -236,7 +237,7 @@ def batch_fit(datasets, sess,
 
     # Iterate over the number of fits
     ll = np.empty((n_fits, n_iter))
-    # prior = pt.zeros((n_fits, K, atlas.P))
+    prior = pt.zeros((n_fits, K, atlas.P))
     for i in range(n_fits):
         print(f'Start fit: repetition {i} - {name}')
 
@@ -259,34 +260,38 @@ def batch_fit(datasets, sess,
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
         m.clear()
 
-        # # Align group priors
-        # if i == 0:
-        #     indx = pt.arange(K)
-        # else:
-        #     indx = ev.matching_greedy(prior[0, :, :], m.marginal_prob())
-        # prior[i, :, :] = m.marginal_prob()[indx, :]
-        #
-        # this_similarity = []
-        # for j in range(i):
-        #     # Option1: K*K similarity matrix between two Us
-        #     # this_crit = cal_corr(prior[i, :, :], prior[j, :, :])
-        #     # this_similarity.append(1 - pt.diagonal(this_crit).mean())
-        #
-        #     # Option2: L1 norm between two Us
-        #     this_crit = pt.abs(prior[i, :, :] - prior[j, :, :]).mean()
-        #     this_similarity.append(this_crit)
-        #
-        # num_rep = sum(sim < 0.02 for sim in this_similarity)
-        # print(num_rep)
+        if second_converge:
+            # Align group priors
+            if i == 0:
+                indx = pt.arange(K)
+            else:
+                indx = ev.matching_greedy(prior[0, :, :], m.marginal_prob())
+            prior[i, :, :] = m.marginal_prob()[indx, :]
+
+            this_similarity = []
+            for j in range(i):
+                # Option1: K*K similarity matrix between two Us
+                # this_crit = cal_corr(prior[i, :, :], prior[j, :, :])
+                # this_similarity.append(1 - pt.diagonal(this_crit).mean())
+
+                # Option2: L1 norm between two Us
+                this_crit = pt.abs(prior[i, :, :] - prior[j, :, :]).mean()
+                this_similarity.append(this_crit)
+
+            num_rep = sum(sim < 0.02 for sim in this_similarity)
+            print(num_rep)
+
+            # Convergence: 1. must run enough repetitions (50);
+            #              2. num_rep greater than threshold (10% of max_iter)
+            if (i > 50) and (num_rep >= int(n_fits * 0.1)):
+                m.move_to(device='cpu')
+                models.append(m)
+                break
 
         # Move to CPU device before storing
         m.move_to(device='cpu')
         models.append(m)
 
-        # Convergence: 1. must run enough repetitions (50);
-        #              2. num_rep greater than threshold (10% of max_iter)
-        # if (i > 50) and (num_rep >= int(n_fits * 0.1)):
-        #     break
         iter_toc = time.perf_counter()
         print(
             f'Done fit: repetition {i} - {name} - {iter_toc - iter_tic:0.4f} seconds!')
@@ -298,7 +303,7 @@ def batch_fit(datasets, sess,
 
 def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
             sym_type=['asym', 'sym'], subj_list=None, weighting=None,
-            this_sess=None, space=None, smooth=None):
+            this_sess=None, space=None, smooth=None, sc=True):
     # Get dataset info
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     datasets = T.name.to_numpy()
@@ -377,7 +382,8 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  uniform_kappa=uniform_kappa,
                                  weighting=weighting,
                                  smooth=smooth,
-                                 hemis=hemis)
+                                 hemis=hemis,
+                                 second_converge=sc)
 
         # Save the fits and information
         wdir = ut.model_dir + f'/Models/Models_{model_type}'
