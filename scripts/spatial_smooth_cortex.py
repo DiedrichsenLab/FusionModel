@@ -138,7 +138,7 @@ def eval_smoothed(model_name, space='fs32k', t_datasets=['MDTB'], train_ses='ses
         res_dcbc, corrs = run_dcbc(model_name, train_dat[:,:,vert_indx], test_dat[:,:,vert_indx],
                                    dist, cond_vec, part_vec,
                                    device='cuda' if pt.cuda.is_available() else 'cpu',
-                                   verbose=False, return_wb=True, same_subj=False)
+                                   verbose=False, return_wb=True, same_subj=True)
         res_dcbc['test_data'] = ds
         res_dcbc['train_ses'] = train_ses
         res_dcbc['test_ses'] = test_ses
@@ -180,7 +180,9 @@ def eval_smoothed_models(K=[100], model_type=['03','04'], space='fs32k', sym='as
             dict[f'train_{s}'] = dict_row
 
         if plot_wb:
-            plot_corr_wb(dict, 0, title=model_name)
+            plot_corr_wb(dict, 0, type_2='wb', title=model_name)
+            plot_corr_wb(dict, 0, type_2='nums', title=model_name)
+            plot_corr_wb(dict, 0, type_2='weight', title=model_name)
 
     if save:
         # Save file
