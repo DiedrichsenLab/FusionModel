@@ -479,9 +479,13 @@ def plot_model_parcel(model_names, grid, cmap='tab20b', align=False, device=None
                     cmap=cmap, dtype='prob',
                     titles=titles)
 
-def plot_corr_wb(corr, idx, type='group', max_D=35, binwidth=1, title=[]):
+def plot_corr_wb(corr, idx, type='group', type_2='wb', max_D=35,
+                 binwidth=1, title=[]):
     x = np.arange(0, max_D, binwidth) + binwidth/2
     num_row = len(corr)
+    naming = {"wb": ['within', 'between', 'Correlation'],
+              "nums": ['numW', 'numB', 'number of voxel pair'],
+              "weight": 'weight'}
     # find a maximum row number variable
     max_col = 0
     for row in corr:
@@ -496,24 +500,38 @@ def plot_corr_wb(corr, idx, type='group', max_D=35, binwidth=1, title=[]):
 
     for i, train_smooth in enumerate(corr.keys()):
         for j, (test_smooth, value) in enumerate(corr[train_smooth].items()):
-            cw = value[idx][f'{type}_within']
-            cb = value[idx][f'{type}_between']
-            # Calculate the mean and standard deviation across subjects for each timestamp
-            se_w = np.nanstd(cw, axis=0) / np.sqrt(cw.shape[0])
-            se_b = np.nanstd(cb, axis=0) / np.sqrt(cb.shape[0])
+            if type_2 == 'wb' or type_2 == 'nums':
+                cw = value[idx][f'{type}_{naming[type_2][0]}']
+                cb = value[idx][f'{type}_{naming[type_2][1]}']
+                # Calculate the mean and standard deviation across subjects for each timestamp
+                se_w = np.nanstd(cw, axis=0) / np.sqrt(cw.shape[0])
+                se_b = np.nanstd(cb, axis=0) / np.sqrt(cb.shape[0])
 
-            # Plot the mean data as a line and show the standard deviation with error bars
-            axes[i,j].errorbar(x, np.nanmean(cw, axis=0), yerr=se_w, fmt='-', c='k',
-                         capsize=1, capthick=0.5, elinewidth=0.8, label='within')
-            axes[i,j].errorbar(x, np.nanmean(cb, axis=0), yerr=se_b, fmt='-', c='r',
-                         capsize=1, capthick=0.5, elinewidth=0.8, label='between')
+                # Plot the mean data as a line and show the standard deviation with error bars
+                axes[i,j].errorbar(x, np.nanmean(cw, axis=0), yerr=se_w,
+                                   fmt='-', c='k', capsize=1, capthick=0.5,
+                                   elinewidth=0.8, label=f'{naming[type_2][0]}')
+                axes[i,j].errorbar(x, np.nanmean(cb, axis=0), yerr=se_b,
+                                   fmt='-', c='r', capsize=1, capthick=0.5,
+                                   elinewidth=0.8, label=f'{naming[type_2][1]}')
 
-            axes[i,j].legend()
-            axes[i,j].set_xlabel('Spatial distance (mm)')
-            axes[i,j].set_ylabel(f'Correlation - {train_smooth}')
-            axes[i,j].set_title(test_smooth)
+                axes[i,j].legend()
+                axes[i,j].set_xlabel('Spatial distance (mm)')
+                axes[i,j].set_ylabel(f'{naming[type_2][2]} - {train_smooth}')
+                axes[i,j].set_title(test_smooth)
+            elif type_2 == 'weight':
+                c = value[idx][f'{type}_weight']
+                se = np.nanstd(c, axis=0) / np.sqrt(c.shape[0])
+                axes[i,j].errorbar(x, np.nanmean(c, axis=0), yerr=se,
+                                   fmt='-', c='b', capsize=1, capthick=0.5,
+                                   elinewidth=0.8, label='weighting')
+                axes[i, j].set_xlabel('Spatial distance (mm)')
+                axes[i, j].set_ylabel(f'weighting - {train_smooth}')
+                axes[i, j].set_title(test_smooth)
+            else:
+                raise ValueError('Unrecognized type 2.')
 
-    plt.suptitle(f'W-B correlation - type:{type} of {title[idx]}')
+    plt.suptitle(f'DCBC related curves - type:{type} of {title[idx]}')
     plt.tight_layout()
     plt.show()
 

@@ -132,7 +132,7 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
         dist[pt.where(pt.isnan(parcels))[0], :] = 0
         dist[:, pt.where(pt.isnan(parcels))[0]] = 0
 
-    dcbc_values, within, between = [], [], []
+    dcbc_values, D_all = [], []
     for sub in range(testdata.shape[0]):
         print(f'Subject {sub}', end=':')
         tic = time.perf_counter()
@@ -145,13 +145,14 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
                              parcellation=parcels[sub],
                              dist=dist, func=testdata[sub].T)
         dcbc_values.append(D['DCBC'])
-        within.append(pt.stack(D['corr_within']))
-        between.append(pt.stack(D['corr_between']))
+        # within.append(pt.stack(D['corr_within']))
+        # between.append(pt.stack(D['corr_between']))
+        D_all.append(D)
         toc = time.perf_counter()
         print(f"{toc-tic:0.4f}s")
 
     if return_wb_corr:
-        return pt.stack(dcbc_values), within, between
+        return pt.stack(dcbc_values), D_all
     else:
         return pt.stack(dcbc_values)
 
@@ -304,12 +305,12 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
     """ Run DCBC group evaluation
 
     Args:
-        par_names (list): List of names for the parcellations to evaluate    
-                Can be either 
-                    nifti files (*_dseg.nii) or 
+        par_names (list): List of names for the parcellations to evaluate
+                Can be either
+                    nifti files (*_dseg.nii) or
                     models (*.npy)
-        space (str): Atlas space (SUIT3, MNISym3C)... 
-        test_data (str): Data set string 
+        space (str): Atlas space (SUIT3, MNISym3C)...
+        test_data (str): Data set string
         test_sess (str, optional): Data set test. Defaults to 'all'.
 
     Returns:
@@ -458,17 +459,43 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
 
         # ------------------------------------------
         # Calculate the DCBC for group and individual
-        dcbc_group,cw1,cb1 = calc_test_dcbc(Pgroup, test_data, dist, return_wb_corr=True)
-        dcbc_indiv,cw2,cb2 = calc_test_dcbc(Pindiv, test_data, dist, return_wb_corr=True)
-        dcbc_indiv_em,cw3,cb3 = calc_test_dcbc(Pindiv_em, test_data, dist, return_wb_corr=True)
-        D = {"group_within": pt.stack(cw1).cpu().numpy(),
-             "group_between": pt.stack(cb1).cpu().numpy(),
-             "indiv_within": pt.stack(cw2).cpu().numpy(),
-             "indiv_between": pt.stack(cb2).cpu().numpy(),
-             "indiv_em_within": pt.stack(cw3).cpu().numpy(),
-             "indiv_em_between": pt.stack(cb3).cpu().numpy(),
-             "model_name": model_name}
-        corr_all.append(D)
+        dcbc_group,D1 = calc_test_dcbc(Pgroup, test_data, dist, return_wb_corr=True)
+        dcbc_indiv,D2 = calc_test_dcbc(Pindiv, test_data, dist, return_wb_corr=True)
+        dcbc_indiv_em,D3 = calc_test_dcbc(Pindiv_em, test_data, dist, return_wb_corr=True)
+        if return_wb:
+            D = {"model_name": model_name,
+                 "group_within": pt.stack([pt.stack(this_d['corr_within'])
+                                           for this_d in D1]).cpu().numpy(),
+                 "group_between": pt.stack([pt.stack(this_d['corr_between'])
+                                            for this_d in D1]).cpu().numpy(),
+                 "group_numW": pt.stack([pt.stack(this_d['num_within'])
+                                           for this_d in D1]).cpu().numpy(),
+                 "group_numB": pt.stack([pt.stack(this_d['num_between'])
+                                            for this_d in D1]).cpu().numpy(),
+                 "indiv_within": pt.stack([pt.stack(this_d['corr_within'])
+                                           for this_d in D2]).cpu().numpy(),
+                 "indiv_between": pt.stack([pt.stack(this_d['corr_between'])
+                                            for this_d in D2]).cpu().numpy(),
+                 "indiv_numW": pt.stack([pt.stack(this_d['num_within'])
+                                           for this_d in D2]).cpu().numpy(),
+                 "indiv_numB": pt.stack([pt.stack(this_d['num_between'])
+                                            for this_d in D2]).cpu().numpy(),
+                 "indiv_em_within": pt.stack([pt.stack(this_d['corr_within'])
+                                              for this_d in D3]).cpu().numpy(),
+                 "indiv_em_between": pt.stack([pt.stack(this_d['corr_between'])
+                                               for this_d in D3]).cpu().numpy(),
+                 "indiv_em_numW": pt.stack([pt.stack(this_d['num_within'])
+                                              for this_d in D3]).cpu().numpy(),
+                 "indiv_em_numB": pt.stack([pt.stack(this_d['num_between'])
+                                               for this_d in D3]).cpu().numpy(),
+                 "group_weight": pt.stack([this_d['weight']
+                                           for this_d in D1]).cpu().numpy(),
+                 "indiv_weight": pt.stack([this_d['weight']
+                                           for this_d in D2]).cpu().numpy(),
+                 "indiv_em_weight": pt.stack([this_d['weight']
+                                              for this_d in D3]).cpu().numpy(),
+                 "model_name": model_name}
+            corr_all.append(D)
 
         # ------------------------------------------
         # Collect the information from the evaluation
@@ -683,7 +710,7 @@ def eval_all_prederror(model_type, prefix, K, verbose=True):
 
 
 def eval_all_dcbc(model_type, prefix, K, space='MNISymC3', models=None, fname_suffix=None, verbose=True):
-    """ Calculates DCBC over all models. 
+    """ Calculates DCBC over all models.
 
         Args:
         model_type (str): Name of model type
