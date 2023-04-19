@@ -269,27 +269,27 @@ def get_cmap(mname, load_best=True, sym=False):
 
     return cmap.colors
 
-def write_model_to_labelcifti(mname, load_best=True, sym=False,
-                              device='cuda'):
-    # Get model and atlas.
-    fileparts = mname.split('/')
-    split_mn = fileparts[-1].split('_')
+def write_model_to_labelcifti(mname, align=True, col_names=None,
+                              oname='', device='cuda'):
+    models, infos = [], []
+    # Load models and produce titles
+    for i, mn in enumerate(mname):
+        info, model = load_batch_best(mn, device=device)
+        models.append(model)
+        infos.append(info)
 
-    if load_best:
-        info, model = load_batch_best(mname, device=device)
-        atlas, _ = am.get_atlas(info.atlas, atlas_dir)
+    # Align models if requested
+    if align:
+        Prob = ev.align_models(models, in_place=False)
     else:
-        info, model = load_batch_fit(mname)
-        atlas, _ = am.get_atlas(info.atlas[0], atlas_dir)
+        Prob = ev.extract_marginal_prob(models)
 
-    if not isinstance(model, list):
-        model = [model]
-
+    atlas, _ = am.get_atlas(infos[0].atlas, atlas_dir)
     # Get winner-take all parcels
-    Prob = np.stack([m.marginal_prob().cpu().numpy() for m in model])
-    parcel = Prob.argmax(axis=1) + 1
-    img = nt.make_label_cifti(parcel.T, atlas.get_brain_model_axis())
-    nb.save(img, model_dir + f'/Models/{mname}.dlabel.nii')
+    parcel = Prob.cpu().numpy().argmax(axis=1) + 1
+    img = nt.make_label_cifti(parcel.T, atlas.get_brain_model_axis(),
+                              column_names=col_names)
+    nb.save(img, model_dir + f'/Models/{oname}.dlabel.nii')
 
 def plot_data_flat(data, atlas,
                    cmap=None,

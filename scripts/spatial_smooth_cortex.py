@@ -245,8 +245,14 @@ if __name__ == "__main__":
     #                space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
-    # fname = 'Models_03/asym_Md_space-fs32k_L_K-17_ses-s1'
-    # ut.write_model_to_labelcifti(fname, load_best=True, sym='asym', device='cpu')
+    # fname = ['Models_03/asym_Md_space-fs32k_L_K-17_ses-s1',
+    #          'Models_03/smoothed/asym_Md_space-fs32k_L_K-17_smooth-1_ses-s1',
+    #          'Models_03/smoothed/asym_Md_space-fs32k_L_K-17_smooth-2_ses-s1',
+    #          'Models_03/smoothed/asym_Md_space-fs32k_L_K-17_smooth-3_ses-s1']
+    # ut.write_model_to_labelcifti(fname, col_names=['smooth_0','smooth_1',
+    #                                                'smooth_2','smooth_3'],
+    #                              oname='Models_03/asym_Md_space-fs32k_L_K-17_ses-s1',
+    #                              device='cpu')
 
     ############# Evaluating models / plot wb-curves #############
     # eval_smoothed_models(K=[17], model_type=['03'], space='fs32k_L', sym='asym',
@@ -254,7 +260,12 @@ if __name__ == "__main__":
     #                      outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
 
     ############# Plotting comparison #############
-    fname = f'/Models/Evaluation/eval_all_asym_K-17_Md_on_Sess_smooth_groupTrain0.tsv'
-    D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_smooth_vs_unsmooth(D, test_s=3)
-    compare_diff_smooth(D, mt='04')
+    # fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-50_Md_on_Sess_smooth.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # # plot_smooth_vs_unsmooth(D, test_s=0)
+    # compare_diff_smooth(D, mt='03')
+
+    ############# Get GOD distance matrix #############
+    import surfAnalysisPy.stats as spstats
+    D = spstats.get_god_distance(atlas_dir + '/tpl-fs32k/tpl_fs32k_hemi-L_sphere.surf.gii',
+                         max_dist=50, out_file=atlas_dir + '/tpl-fs32k/distGOD.mat')

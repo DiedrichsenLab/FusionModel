@@ -459,10 +459,10 @@ if __name__ == "__main__":
     # Making color map
     K = [34]
     model_type = ['03']
-    # fname = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34',
-    #          f'/Models_03/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-34',
-    #          f'/Models_03/asym_Hc_space-MNISymC3_K-34']
-    colors = ut.get_cmap(f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-34_hcpOdd')
+    fname = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34',
+             f'/Models_03/leaveNout/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-34_hcpOdd',
+             f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-34_hcpOdd']
+    colors = ut.get_cmap(f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34')
     # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     # results = pd.DataFrame()
     # model_name = []
@@ -481,6 +481,6 @@ if __name__ == "__main__":
     # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
     #                for this_k in K for mt in model_type]
     #
-    # plt.figure(figsize=(10, 10))
-    # plot_model_parcel(model_name, [8, 2], cmap=colors, align=True, device='cuda')
-    # plt.show()
+    plt.figure(figsize=(10, 10))
+    plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
+    plt.show()
