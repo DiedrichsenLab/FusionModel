@@ -34,7 +34,8 @@ from FusionModel.evaluate import *
 from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
-pt.cuda.is_available = lambda : False
+# pt.cuda.is_available = lambda : False
+DEVICE = pt.device('cuda' if pt.cuda.is_available() else 'cpu')
 pt.set_default_tensor_type(pt.cuda.FloatTensor
                            if pt.cuda.is_available() else
                            pt.FloatTensor)
@@ -72,6 +73,7 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                                                     repeats=50,
                                                     model_type=model_type,
                                                     sym_type=sym_type,
+                                                    arrange='cRBM_Wc',
                                                     this_sess=[[indv_sess]],
                                                     space=space, smooth=s)
 
@@ -159,17 +161,17 @@ def eval_smoothed_models(K=[100], model_type=['03','04'], space='fs32k', sym='as
             dict_row = {}
             for t in smooth:
                 #### Option 1: the group prior was trained all from unsmoothed data
-                model_name = [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
-                              for this_k in K for mt in model_type]
+                # model_name = [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
+                #               for this_k in K for mt in model_type]
                 #### Option 2: the group prior was trained on the same smoothing level
                 #### that we used for individual training
-                # model_name = []
-                # if s != 0:
-                #     model_name += [f'Models_{mt}/smoothed/{sym}_Md_space-{space}_K-{this_k}_smooth' \
-                #                    f'-{s}_{train_ses}' for this_k in K for mt in model_type]
-                # else:
-                #     model_name += [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
-                #                    for this_k in K for mt in model_type]
+                model_name = []
+                if s != 0:
+                    model_name += [f'Models_{mt}/smoothed/{sym}_Md_space-{space}_K-{this_k}_smooth' \
+                                   f'-{s}_{train_ses}' for this_k in K for mt in model_type]
+                else:
+                    model_name += [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
+                                   for this_k in K for mt in model_type]
 
                 results, corrs = eval_smoothed(model_name, space=space, t_datasets=['MDTB'],
                                                train_ses=train_ses, test_ses=test_ses,
@@ -240,11 +242,11 @@ if __name__ == "__main__":
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
     # 2. fit single hemisphere (using asymmetric arrangement)
-    # for mt in ['03','04']:
-    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-    #                space='fs32k_L')
-    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-    #                space='fs32k_R')
+    for mt in ['03','04']:
+        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+                   space='fs32k_L')
+        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+                   space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
     # fname = ['Models_03/asym_Md_space-fs32k_L_K-17_ses-s1',
@@ -257,17 +259,12 @@ if __name__ == "__main__":
     #                              device='cpu')
 
     ############# Evaluating models / plot wb-curves #############
-    # eval_smoothed_models(K=[17], model_type=['03'], space='fs32k_L', sym='asym',
-    #                      smooth=[0,1,2,3], save=False, plot_wb=True,
-    #                      outname='asym_K-17_Md_on_Sess_smooth_groupTrain0')
+    # eval_smoothed_models(K=[50], model_type=['03'], space='fs32k_L', sym='asym',
+    #                      smooth=[0,1,2,3,4,5,6,7], save=True, plot_wb=True,
+    #                      outname='asym_K-50_Md_on_Sess_smooth')
 
     ############# Plotting comparison #############
-    # fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-50_Md_on_Sess_smooth.tsv'
-    # D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # # plot_smooth_vs_unsmooth(D, test_s=0)
-    # compare_diff_smooth(D, mt='03')
-
-    ############# Get GOD distance matrix #############
-    import surfAnalysisPy.stats as spstats
-    D = spstats.get_god_distance(atlas_dir + '/tpl-fs32k/tpl_fs32k_hemi-L_sphere.surf.gii',
-                         max_dist=50, out_file=atlas_dir + '/tpl-fs32k/distGOD.mat')
+    fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-50_Md_on_Sess_smooth.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # plot_smooth_vs_unsmooth(D, test_s=1)
+    compare_diff_smooth(D, mt='03')

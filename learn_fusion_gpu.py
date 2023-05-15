@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import pickle
 from copy import deepcopy
 import time
+import FusionModel.util as ut
 
 
 def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
@@ -104,10 +105,9 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
     return data, cond_vec, part_vec, subj_ind
 
 
-def build_model(K, arrange, sym_type, emission, atlas,
-                cond_vec, part_vec,
-                uniform_kappa=True,
-                weighting=None):
+def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
+                uniform_kappa=True, weighting=None, epos_iter=5, eneg_iter=10,
+                num_chain=20, Wc=None, theta=None):
     """ Builds a Full model based on your specification"""
     if arrange == 'independent':
         if sym_type == 'sym':
@@ -117,10 +117,27 @@ def build_model(K, arrange, sym_type, emission, atlas,
                                                       same_parcels=False,
                                                       spatial_specific=True,
                                                       remove_redundancy=False)
+            ar_model.name = 'indp_sym'
         elif sym_type == 'asym':
             ar_model = ar.ArrangeIndependent(K, atlas.P,
                                              spatial_specific=True,
                                              remove_redundancy=False)
+            ar_model.name = 'indp_asym'
+    elif arrange == 'cRBM_W':
+        # Boltzmann with a arbitrary fully connected model - P hiden nodes
+        n_hidden = atlas.P
+        ar_model = ar.cmpRBM(K, atlas.P, nh=n_hidden, eneg_iter=eneg_iter,
+                             epos_iter=epos_iter, eneg_numchains=num_chain)
+        ar_model.name=f'cRBM_{n_hidden}'
+    elif arrange == 'cRBM_Wc':
+        # Covolutional Boltzman machine with the true neighbourhood matrix
+        # theta_w in this case is not fit.
+        if Wc is None:
+            raise ValueError('Wc must be provided')
+
+        ar_model = ar.wcmDBM(K, atlas.P, Wc=Wc, theta=theta, eneg_iter=eneg_iter,
+                             epos_iter=epos_iter, eneg_numchains=num_chain)
+        ar_model.name = 'cRBM_Wc'
     else:
         raise (NameError(f'unknown arrangement model:{arrange}'))
 
@@ -156,7 +173,7 @@ def batch_fit(datasets, sess,
               type=None, cond_ind=None, part_ind=None, subj=None,
               atlas=None,
               K=10,
-              arrange='independent',
+              arrange='cRBM_Wc',
               sym_type='asym',
               emission='VMF',
               n_rep=3, n_inits=10, n_iter=80, first_iter=10,
@@ -215,9 +232,19 @@ def batch_fit(datasets, sess,
         atlas, _ = am.get_atlas('fs32k_R', ut.atlas_dir)
 
     print(f'Building fullMultiModel {arrange} + {emission} for fitting...')
+    # Load connectiviy matrix if cpRBM with connectiviy is used
+    if arrange == 'cRBM_Wc':
+        Wc = ut.get_fs32k_weights(file_type='distGOD_sp',
+                                  hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
+                                  remove_mw=True, kernel='gaussian', sigma=10,
+                                  device='cuda' if pt.cuda.is_available() else 'cpu')
+    else:
+        Wc = None
     M = build_model(K, arrange, sym_type, emission, atlas,
-                    cond_vec, part_vec,
-                    uniform_kappa, weighting)
+                    cond_vec, part_vec, uniform_kappa, weighting,
+                    Wc=Wc if pt.cuda.is_available() else Wc.to_dense())
+
+    del Wc
     fm.report_cuda_memory()
 
     # Initialize data frame for results
@@ -248,18 +275,28 @@ def batch_fit(datasets, sess,
         m.initialize(data, subj_ind=subj_ind)
         fm.report_cuda_memory()
 
-        m, ll, _, _, _ = m.fit_em_ninits(
-            iter=n_iter,
-            tol=0.01,
-            fit_arrangement=True,
-            fit_emission=True,
-            init_arrangement=True,
-            init_emission=True,
-            n_inits=n_inits,
-            first_iter=first_iter, verbose=False)
+        # Swith the learning process between independent and RBMs
+        if m.arrange.name.startswith('indp'):
+            m, ll, _, _, _ = m.fit_em_ninits(
+                iter=n_iter,
+                tol=0.01,
+                fit_arrangement=True,
+                fit_emission=True,
+                init_arrangement=True,
+                init_emission=True,
+                n_inits=n_inits,
+                first_iter=first_iter, verbose=False)
+        elif m.arrange.name.startswith('cRBM'):
+            m, ll, _, _, _ = m.fit_sml(
+                iter=n_iter,
+                batch_size=10,
+                stepsize=0.05,
+                seperate_ll=False,
+                fit_arrangement=True,
+                fit_emission=True)
+
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
         m.clear()
-
         if second_converge:
             # Align group priors
             if i == 0:
@@ -302,8 +339,8 @@ def batch_fit(datasets, sess,
 
 
 def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
-            sym_type=['asym', 'sym'], subj_list=None, weighting=None,
-            this_sess=None, space=None, smooth=None, sc=True):
+            sym_type=['asym', 'sym'], arrange='independent', subj_list=None,
+            weighting=None, this_sess=None, space=None, smooth=None, sc=True):
     # Get dataset info
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     datasets = T.name.to_numpy()
@@ -371,6 +408,7 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  subj=subj_list,
                                  atlas=atlas,
                                  K=K,
+                                 arrange=arrange,
                                  sym_type=mname,
                                  name=name,
                                  n_inits=50,
