@@ -106,7 +106,7 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
 
 
 def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
-                uniform_kappa=True, weighting=None, epos_iter=5, eneg_iter=10,
+                uniform_kappa=True, weighting=None, epos_iter=1, eneg_iter=5,
                 num_chain=20, Wc=None, theta=None):
     """ Builds a Full model based on your specification"""
     if arrange == 'independent':
@@ -238,13 +238,16 @@ def batch_fit(datasets, sess,
                                   hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
                                   remove_mw=True, kernel='gaussian', sigma=10,
                                   device='cuda' if pt.cuda.is_available() else 'cpu')
+
+        # Use sparse tensor if CUDA is enabled, otherwise dense tensor
+        Wc = Wc.to_sparse_csr() if pt.cuda.is_available() else Wc.to_dense()
     else:
         Wc = None
-    M = build_model(K, arrange, sym_type, emission, atlas,
-                    cond_vec, part_vec, uniform_kappa, weighting,
-                    Wc=Wc if pt.cuda.is_available() else Wc.to_dense())
+    M = build_model(K, arrange, sym_type, emission, atlas, cond_vec,
+                    part_vec, uniform_kappa, weighting, Wc=Wc)
 
     del Wc
+    pt.cuda.empty_cache()
     fm.report_cuda_memory()
 
     # Initialize data frame for results
@@ -264,7 +267,7 @@ def batch_fit(datasets, sess,
 
     # Iterate over the number of fits
     ll = np.empty((n_fits, n_iter))
-    prior = pt.zeros((n_fits, K, atlas.P))
+    prior = pt.zeros((n_fits, K, atlas.P)) if second_converge else None
     for i in range(n_fits):
         print(f'Start fit: repetition {i} - {name}')
 
@@ -273,6 +276,7 @@ def batch_fit(datasets, sess,
         m = deepcopy(M)
         # Attach the data
         m.initialize(data, subj_ind=subj_ind)
+        pt.cuda.empty_cache()
         fm.report_cuda_memory()
 
         # Swith the learning process between independent and RBMs

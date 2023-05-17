@@ -75,7 +75,8 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                                                     sym_type=sym_type,
                                                     arrange='cRBM_Wc',
                                                     this_sess=[[indv_sess]],
-                                                    space=space, smooth=s)
+                                                    space=space, smooth=s,
+                                                    sc=False)
 
                 if s is not None:
                     wdir = wdir + '/smoothed'
