@@ -106,7 +106,7 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
 
 
 def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
-                uniform_kappa=True, weighting=None, epos_iter=1, eneg_iter=5,
+                uniform_kappa=True, weighting=None, epos_iter=5, eneg_iter=5,
                 num_chain=20, Wc=None, theta=None):
     """ Builds a Full model based on your specification"""
     if arrange == 'independent':
@@ -291,9 +291,11 @@ def batch_fit(datasets, sess,
                 n_inits=n_inits,
                 first_iter=first_iter, verbose=False)
         elif m.arrange.name.startswith('cRBM'):
+            m.random_params(init_arrangement=True,
+                            init_emission=True)
             m, ll, _, _, _ = m.fit_sml(
                 iter=n_iter,
-                batch_size=10,
+                batch_size=8,
                 stepsize=0.05,
                 seperate_ll=False,
                 fit_arrangement=True,
@@ -416,7 +418,7 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  sym_type=mname,
                                  name=name,
                                  n_inits=50,
-                                 n_iter=200,
+                                 n_iter=50,
                                  n_rep=repeats,
                                  first_iter=30,
                                  join_sess=join_sess,

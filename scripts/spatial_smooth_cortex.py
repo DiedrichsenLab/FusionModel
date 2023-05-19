@@ -70,7 +70,7 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
         for k in K:
             for s in smooth:
                 wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
-                                                    repeats=50,
+                                                    repeats=10,
                                                     model_type=model_type,
                                                     sym_type=sym_type,
                                                     arrange='cRBM_Wc',
