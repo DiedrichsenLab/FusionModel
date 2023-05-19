@@ -61,7 +61,7 @@ atlas_dir = base_dir + f'/Atlases'
 res_dir = model_dir + f'/Results'
 
 def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
-               sym_type=['asym'], datasets_list=[0], space='fs32k'):
+               sym_type=['asym'], datasets_list=[0], space='fs32k', arrange='cRBM_Wc'):
     # datasets = np.array(['MDTB', 'Pontine', 'Nishimoto', 'IBC', 'WMFS',
     #                      'Demand', 'Somatotopic', 'HCP'], dtype=object)
     _, _, my_dataset = get_dataset(ut.base_dir, 'MDTB')
@@ -73,16 +73,16 @@ def fit_smooth(K=[10, 17, 20, 34, 40, 68, 100], smooth=[0,3,7], model_type='03',
                                                     repeats=10,
                                                     model_type=model_type,
                                                     sym_type=sym_type,
-                                                    arrange='cRBM_Wc',
+                                                    arrange=arrange,
                                                     this_sess=[[indv_sess]],
                                                     space=space, smooth=s,
                                                     sc=False)
 
                 if s is not None:
                     wdir = wdir + '/smoothed'
-                    fname = fname + f'_smooth-{s}_{indv_sess}'
+                    fname = fname + f'_smooth-{s}_{indv_sess}_{arrange}'
                 else:
-                    fname = fname + f'_{indv_sess}'
+                    fname = fname + f'_{indv_sess}_{arrange}'
 
                 # Write in fitted files
                 print(f'Write in {wdir + fname}...')
