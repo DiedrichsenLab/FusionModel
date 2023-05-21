@@ -293,7 +293,7 @@ def batch_fit(datasets, sess,
         elif m.arrange.name.startswith('cRBM'):
             m.random_params(init_arrangement=True,
                             init_emission=True)
-            m, ll, _, _, _ = m.fit_sml(
+            m, ll, theta, _ = m.fit_sml(
                 iter=n_iter,
                 batch_size=8,
                 stepsize=0.05,
@@ -334,6 +334,7 @@ def batch_fit(datasets, sess,
         # Move to CPU device before storing
         m.move_to(device='cpu')
         models.append(m)
+        pt.cuda.empty_cache()
 
         iter_toc = time.perf_counter()
         print(

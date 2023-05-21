@@ -246,8 +246,8 @@ if __name__ == "__main__":
     for mt in ['03','04']:
         fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
                    space='fs32k_L')
-        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-                   space='fs32k_R')
+        # fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+        #            space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
     # fname = ['Models_03/asym_Md_space-fs32k_L_K-17_ses-s1',
