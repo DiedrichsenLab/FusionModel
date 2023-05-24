@@ -15,7 +15,7 @@ import FusionModel.similarity_colormap as sc
 import FusionModel.depreciated.hierarchical_clustering as cl
 import nitools as nt
 import scipy.io as spio
-from scipy.sparse import block_diag
+from scipy.sparse import block_diag, coo_matrix
 import scipy.ndimage as snd
 
 # Set directories for the entire project - just set here and import everywhere
@@ -189,16 +189,19 @@ def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
     return sparse_tensor.to(device=device)
 
 def get_fs32k_weights(file_type='distGOD_sp', hemis='full', remove_mw=True,
-                      kernel='gaussian', sigma=10, device='cuda'):
+                      max_dist=None, kernel='gaussian', sigma=10, device='cuda'):
     # Load distance metric of vertices pairs in fs32k template
     atlas, info = am.get_atlas('fs32k', atlas_dir=base_dir + '/Atlases')
     dist = spio.loadmat(base_dir + '/Atlases/{0}'.format(info['dir'])
                         + f'/{file_type}.mat')
     dist = dist['avrgDs']
 
-    # Remove medial wall if applied
+    # Remove medial wall and larger distances if applied
     if remove_mw:
         dist = dist[:, atlas.vertex[0]][atlas.vertex[0], :]
+    if max_dist is not None:
+        dist[dist > max_dist] = 0
+        dist = coo_matrix(dist.todense())
 
     # Concatenate both hemispheres if `full`
     if hemis == 'full':
@@ -211,11 +214,11 @@ def get_fs32k_weights(file_type='distGOD_sp', hemis='full', remove_mw=True,
                          'or whole cortex!')
 
     # Convert the numpy sparse matrix to a PyTorch sparse tensor
-    coo_matrix = dist.tocoo()
-    indices = pt.LongTensor(np.vstack((coo_matrix.row, coo_matrix.col)))
+    coo_mat = dist.tocoo()
+    indices = pt.LongTensor(np.vstack((coo_mat.row, coo_mat.col)))
     sparse_tensor = pt.sparse_coo_tensor(indices,
-                                         pt.FloatTensor(coo_matrix.data),
-                                         pt.Size(coo_matrix.shape))
+                                         pt.FloatTensor(coo_mat.data),
+                                         pt.Size(coo_mat.shape))
 
     # create a diagonal tensor - fill by zeros
     N = sparse_tensor.shape[0]
@@ -228,6 +231,8 @@ def get_fs32k_weights(file_type='distGOD_sp', hemis='full', remove_mw=True,
     values = weights._values()
     if kernel == 'gaussian':
         values = pt.exp(-values ** 2 / (2*sigma**2))
+    elif kernel == 'connectivity':
+        values = pt.ones_like(values)
     else:
         raise ValueError('Unknown kernel type! '
                          'We currently support gaussina kernel only.')

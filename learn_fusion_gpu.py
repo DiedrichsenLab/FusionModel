@@ -236,11 +236,12 @@ def batch_fit(datasets, sess,
     if arrange == 'cRBM_Wc':
         Wc = ut.get_fs32k_weights(file_type='distGOD_sp',
                                   hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
-                                  remove_mw=True, kernel='gaussian', sigma=10,
+                                  remove_mw=True, max_dist=20, kernel='gaussian', sigma=10,
                                   device='cuda' if pt.cuda.is_available() else 'cpu')
 
         # Use sparse tensor if CUDA is enabled, otherwise dense tensor
         Wc = Wc.to_sparse_csr() if pt.cuda.is_available() else Wc.to_dense()
+        Wc.values().fill_(1)
     else:
         Wc = None
     M = build_model(K, arrange, sym_type, emission, atlas, cond_vec,
@@ -267,6 +268,7 @@ def batch_fit(datasets, sess,
 
     # Iterate over the number of fits
     ll = np.empty((n_fits, n_iter))
+    tt = np.empty((n_fits, n_iter))
     prior = pt.zeros((n_fits, K, atlas.P)) if second_converge else None
     for i in range(n_fits):
         print(f'Start fit: repetition {i} - {name}')
@@ -296,10 +298,11 @@ def batch_fit(datasets, sess,
             m, ll, theta, _ = m.fit_sml(
                 iter=n_iter,
                 batch_size=8,
-                stepsize=0.05,
+                stepsize=0.1,
                 seperate_ll=False,
                 fit_arrangement=True,
                 fit_emission=True)
+            tt[i] = theta.cpu().numpy()
 
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
         m.clear()
@@ -341,6 +344,8 @@ def batch_fit(datasets, sess,
             f'Done fit: repetition {i} - {name} - {iter_toc - iter_tic:0.4f} seconds!')
 
     models = np.array(models, dtype=object)
+    plt.plot(tt.T)
+    plt.show()
 
     return info, models
 
@@ -419,7 +424,7 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  sym_type=mname,
                                  name=name,
                                  n_inits=50,
-                                 n_iter=50,
+                                 n_iter=30,
                                  n_rep=repeats,
                                  first_iter=30,
                                  join_sess=join_sess,
