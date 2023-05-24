@@ -21,10 +21,10 @@ import matplotlib.pyplot as plt
 import scipy.io as spio
 
 # Modeling import
-import generativeMRF.emissions as em
-import generativeMRF.arrangements as ar
-import generativeMRF.full_model as fm
-import generativeMRF.evaluation as ev
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.full_model as fm
+import HierarchBayesParcel.evaluation as ev
 
 # Dataset fusion import
 import Functional_Fusion.atlas_map as am
@@ -243,21 +243,17 @@ if __name__ == "__main__":
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
     # 2. fit single hemisphere (using asymmetric arrangement)
-    for mt in ['03','04']:
-        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-                   space='fs32k_L')
-        # fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-        #            space='fs32k_R')
+    # for mt in ['03','04']:
+    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+    #                space='fs32k_L')
+    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+    #                space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
-    # fname = ['Models_03/asym_Md_space-fs32k_L_K-17_ses-s1',
-    #          'Models_03/smoothed/asym_Md_space-fs32k_L_K-17_smooth-1_ses-s1',
-    #          'Models_03/smoothed/asym_Md_space-fs32k_L_K-17_smooth-2_ses-s1',
-    #          'Models_03/smoothed/asym_Md_space-fs32k_L_K-17_smooth-3_ses-s1']
-    # ut.write_model_to_labelcifti(fname, col_names=['smooth_0','smooth_1',
-    #                                                'smooth_2','smooth_3'],
-    #                              oname='Models_03/asym_Md_space-fs32k_L_K-17_ses-s1',
-    #                              device='cpu')
+    fname = ['Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_50_step-0.1']
+    ut.write_model_to_labelcifti(fname, align=False, col_names=None, load='all',
+                                 oname='Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_0.1_50_step-0.1',
+                                 device='cpu')
 
     ############# Evaluating models / plot wb-curves #############
     # eval_smoothed_models(K=[50], model_type=['03'], space='fs32k_L', sym='asym',
@@ -267,5 +263,5 @@ if __name__ == "__main__":
     ############# Plotting comparison #############
     fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-50_Md_on_Sess_smooth.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_smooth_vs_unsmooth(D, test_s=1)
+    plot_smooth_vs_unsmooth(D, test_s=0)
     compare_diff_smooth(D, mt='03')

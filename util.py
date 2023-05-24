@@ -8,11 +8,11 @@ import pandas as pd
 import torch as pt
 import json
 import matplotlib.pyplot as plt
-import generativeMRF.evaluation as ev
-import generativeMRF.full_model as fm
+import HierarchBayesParcel.evaluation as ev
+import HierarchBayesParcel.full_model as fm
 from pathlib import Path
 import FusionModel.similarity_colormap as sc
-import FusionModel.hierarchical_clustering as cl
+import FusionModel.depreciated.hierarchical_clustering as cl
 import nitools as nt
 import scipy.io as spio
 from scipy.sparse import block_diag
@@ -85,7 +85,7 @@ def cal_corr(Y_target, Y_source):
     return Corr
 
 
-def load_batch_fit(fname):
+def load_batch_fit(fname, device=None):
     """ Loads a batch of fits and extracts marginal probability maps
     and mean vectors
     Args:
@@ -98,6 +98,11 @@ def load_batch_fit(fname):
     info = pd.read_csv(wdir + fname + '.tsv', sep='\t')
     with open(wdir + fname + '.pickle', 'rb') as file:
         models = pickle.load(file)
+
+    if device is not None:
+        for m in models:
+            m.move_to(device)
+
     return info, models
 
 
@@ -270,13 +275,23 @@ def get_cmap(mname, load_best=True, sym=False):
     return cmap.colors
 
 def write_model_to_labelcifti(mname, align=True, col_names=None,
-                              oname='', device='cuda'):
-    models, infos = [], []
-    # Load models and produce titles
-    for i, mn in enumerate(mname):
-        info, model = load_batch_best(mn, device=device)
-        models.append(model)
-        infos.append(info)
+                              load='best', oname='', device='cuda'):
+
+    if load == 'best':
+        models, infos = [], []
+        # Load models and produce titles
+        for i, mn in enumerate(mname):
+            info, model = load_batch_best(mn, device=device)
+            models.append(model)
+            infos.append(info)
+        at_name = infos[0].atlas
+    elif load == 'all':
+        assert len(mname) == 1, 'Only one model can be loaded at a time!'
+        infos, models = load_batch_fit(mname[0], device=device)
+        at_name = infos.atlas[0]
+    else:
+        raise ValueError('Unknown load type! Please specify whether to load '
+                            'the best model or all models.')
 
     # Align models if requested
     if align:
@@ -284,9 +299,13 @@ def write_model_to_labelcifti(mname, align=True, col_names=None,
     else:
         Prob = ev.extract_marginal_prob(models)
 
-    atlas, _ = am.get_atlas(infos[0].atlas, atlas_dir)
+    atlas, _ = am.get_atlas(at_name, atlas_dir)
     # Get winner-take all parcels
     parcel = Prob.cpu().numpy().argmax(axis=1) + 1
+
+    if col_names is None:
+        col_names = [f'col_{i+1}' for i in range(parcel.shape[0])]
+
     img = nt.make_label_cifti(parcel.T, atlas.get_brain_model_axis(),
                               column_names=col_names)
     nb.save(img, model_dir + f'/Models/{oname}.dlabel.nii')

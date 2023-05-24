@@ -14,11 +14,11 @@ import Functional_Fusion.atlas_map as am
 from Functional_Fusion.dataset import *
 import Functional_Fusion.matrix as matrix
 import nibabel as nb
-import generativeMRF.full_model as fm
-import generativeMRF.spatial as sp
-import generativeMRF.arrangements as ar
-import generativeMRF.emissions as em
-import generativeMRF.evaluation as ev
+import HierarchBayesParcel.full_model as fm
+import HierarchBayesParcel.spatial as sp
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.evaluation as ev
 import torch as pt
 import matplotlib.pyplot as plt
 import pickle
@@ -619,14 +619,9 @@ def refit_model(model, new_info):
 
 
 if __name__ == "__main__":
-    K = 34
-    sym_type = ['asym']
-    model_type = '03'
-    space = 'MNISymC3'
     datasets_list = [1, 7]
-
     for k in [10, 20, 34, 40, 68, 100]:
-        fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=model_type,
+        fit_all(set_ind=datasets_list, K=k, repeats=100, model_type='03',
                 sym_type=['asym'], space='MNISymC3')
 
     pass
