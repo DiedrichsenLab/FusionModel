@@ -3,7 +3,8 @@ FusionModel
 Diedrichsen Lab, Western University
 
 This repository hosts the scripts to replicate the results claimed in the 
-[paper](https://www.diedrichsenlab.org/). It uses the functions from two repositories, [HierarchBayesParcel](https://github.com/DiedrichsenLab/HierarchBayesParcel)
+[paper](https://www.biorxiv.org/content/10.1101/2023.05.24.542121v1). It uses the functions from 
+two repositories, [HierarchBayesParcel](https://github.com/DiedrichsenLab/HierarchBayesParcel)
 and [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion). The former is the 
 computational model and the latter is the data preprocessing pipeline. The general workflow is
 to first preprocess the data using our pipeline to bring different fMRI datasets into a standard 
@@ -14,7 +15,7 @@ Reference
 ------
 * Zhi, D., Shahshahani, L., Nettekovena, C., Pinho, A. L. Bzdok, D., Diedrichsen, J., (2023). 
 "A hierarchical Bayesian brain parcellation framework for fusion of functional imaging datasets". 
-BioRxiv. [[link]](https://www.diedrichsenlab.org/)
+BioRxiv. [[link]](https://www.biorxiv.org/content/10.1101/2023.05.24.542121v1)
 
 Dependencies
 ------
