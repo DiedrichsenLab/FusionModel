@@ -243,11 +243,11 @@ if __name__ == "__main__":
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
     # 2. fit single hemisphere (using asymmetric arrangement)
-    # for mt in ['03','04']:
-    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-    #                space='fs32k_L')
-    #     fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-    #                space='fs32k_R')
+    for mt in ['03','04']:
+        fit_smooth(K=[17], smooth=[None], model_type=mt, sym_type=['asym'],
+                   space='fs32k_L')
+        fit_smooth(K=[17], smooth=[None], model_type=mt, sym_type=['asym'],
+                   space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
     fname = ['Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_50_step-0.1']

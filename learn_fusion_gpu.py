@@ -226,6 +226,7 @@ def batch_fit(datasets, sess,
 
     # Load all necessary data and designs
     n_sets = len(data)
+    n_subj = sum(len(sublist) for sublist in subj_ind)
     if hemis == 'L':
         atlas, _ = am.get_atlas('fs32k_L', ut.atlas_dir)
     elif hemis == 'R':
@@ -236,7 +237,7 @@ def batch_fit(datasets, sess,
     if arrange == 'cRBM_Wc':
         Wc = ut.get_fs32k_weights(file_type='distGOD_sp',
                                   hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
-                                  remove_mw=True, max_dist=20, kernel='gaussian', sigma=10,
+                                  remove_mw=True, max_dist=10, kernel='gaussian', sigma=10,
                                   device='cuda' if pt.cuda.is_available() else 'cpu')
 
         # Use sparse tensor if CUDA is enabled, otherwise dense tensor
@@ -245,7 +246,7 @@ def batch_fit(datasets, sess,
     else:
         Wc = None
     M = build_model(K, arrange, sym_type, emission, atlas, cond_vec,
-                    part_vec, uniform_kappa, weighting, Wc=Wc)
+                    part_vec, uniform_kappa, weighting, Wc=Wc, num_chain=n_subj)
 
     del Wc
     pt.cuda.empty_cache()
