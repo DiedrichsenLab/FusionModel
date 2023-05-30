@@ -157,6 +157,60 @@ def load_batch_best(fname, device=None):
     info_reduced = info.iloc[j]
     return info_reduced, best_model
 
+def get_fs32k_neighbours(surf, include_self=True, remove_mw=True, return_type='pt_csr'):
+    '''Compute the neighbouring matrix of cortical mash
+
+    :param file: the cortical mash file (e.g surf.gii)
+    :return:     the vertices neighbouring matrix, shape = [N,N],
+                 N is the number of vertices
+
+    '''
+    atlas, info = am.get_atlas('fs32k', atlas_dir=base_dir + '/Atlases')
+
+    if not Path(surf).exists():
+        raise (NameError('Could not find file'))
+    elif isinstance(surf, str):
+        mat = nb.load(surf)
+        surf = [x.data for x in mat.darrays]
+    else:
+        # NiBabel can handle if input is not GiftiImage object
+        surf = [x.data for x in surf.darrays]
+
+    surf_vertices = surf[0]
+    surf_faces = surf[1]
+
+    neigh = np.zeros([surf_vertices.shape[0], surf_vertices.shape[0]])
+    for idx in range(surf_vertices.shape[0]):
+        # the surf faces usually shape of [N,3] because a typical mesh is a triangle
+        connected_idx = np.where(np.any(surf_faces == idx, axis=1))[0]
+        connected = np.unique(surf_faces[connected_idx,:])
+        neigh[idx, connected] = 1
+
+    if not include_self:
+        np.fill_diagonal(neigh, 0)
+
+    # Remove medial wall if applied
+    if remove_mw:
+        neigh = neigh[:, atlas.vertex[0]][atlas.vertex[0], :]
+
+    # Return types
+    if return_type == 'full':
+        return neigh
+    elif return_type == 'sparse_coo':
+        return coo_matrix(neigh)
+    elif return_type == 'pt_coo':
+        return pt.sparse_coo_tensor(np.argwhere(neigh != 0).T,
+                                    pt.tensor(neigh[neigh != 0],
+                                              dtype=pt.get_default_dtype()),
+                                    neigh.shape)
+    elif return_type == 'pt_csr':
+        neigh = pt.sparse_coo_tensor(np.argwhere(neigh != 0).T,
+                                    pt.tensor(neigh[neigh != 0],
+                                              dtype=pt.get_default_dtype()),
+                                    neigh.shape)
+        return neigh.to_sparse_csr()
+
+
 def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
                     device='cuda'):
     # Load distance metric of vertices pairs in fs32k template

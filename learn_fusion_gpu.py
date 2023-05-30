@@ -235,14 +235,16 @@ def batch_fit(datasets, sess,
     print(f'Building fullMultiModel {arrange} + {emission} for fitting...')
     # Load connectiviy matrix if cpRBM with connectiviy is used
     if arrange == 'cRBM_Wc':
-        Wc = ut.get_fs32k_weights(file_type='distGOD_sp',
-                                  hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
-                                  remove_mw=True, max_dist=10, kernel='gaussian', sigma=10,
-                                  device='cuda' if pt.cuda.is_available() else 'cpu')
+        surf = 'Y:/data/FunctionalFusion/Atlases/tpl-fs32k/tpl_fs32k_hemi-L_sphere.surf.gii'
+        Wc = ut.get_fs32k_neighbours(surf, remove_mw=True)
+        # Wc = ut.get_fs32k_weights(file_type='distGOD_sp',
+        #                           hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
+        #                           remove_mw=True, max_dist=10, kernel='gaussian', sigma=10,
+        #                           device='cuda' if pt.cuda.is_available() else 'cpu')
 
         # Use sparse tensor if CUDA is enabled, otherwise dense tensor
-        Wc = Wc.to_sparse_csr() if pt.cuda.is_available() else Wc.to_dense()
-        Wc.values().fill_(1)
+        # Wc = Wc.to_sparse_csr() if pt.cuda.is_available() else Wc.to_dense()
+        # Wc.values().fill_(1)
     else:
         Wc = None
     M = build_model(K, arrange, sym_type, emission, atlas, cond_vec,

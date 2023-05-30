@@ -244,16 +244,17 @@ if __name__ == "__main__":
 
     # 2. fit single hemisphere (using asymmetric arrangement)
     for mt in ['03','04']:
-        fit_smooth(K=[17], smooth=[None], model_type=mt, sym_type=['asym'],
+        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
                    space='fs32k_L')
-        fit_smooth(K=[17], smooth=[None], model_type=mt, sym_type=['asym'],
+        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
                    space='fs32k_R')
 
     ############# Convert fitted model to label cifti #############
-    fname = ['Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_50_step-0.1']
+    fname = ['Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc']
     ut.write_model_to_labelcifti(fname, align=False, col_names=None, load='all',
-                                 oname='Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_0.1_50_step-0.1',
-                                 device='cpu')
+                                 oname='Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_'
+                                       '10_step-0.2',
+                                 device='cuda')
 
     ############# Evaluating models / plot wb-curves #############
     # eval_smoothed_models(K=[50], model_type=['03'], space='fs32k_L', sym='asym',
