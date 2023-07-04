@@ -160,19 +160,19 @@ def eval_smoothed_models(K=[100], model_type=['03','04'], space='fs32k', sym='as
         dict = {}
         for s in smooth:
             dict_row = {}
-            for t in smooth:
+            for t in [0]:
                 #### Option 1: the group prior was trained all from unsmoothed data
-                # model_name = [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
-                #               for this_k in K for mt in model_type]
+                model_name = [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
+                              for this_k in K for mt in model_type]
                 #### Option 2: the group prior was trained on the same smoothing level
                 #### that we used for individual training
-                model_name = []
-                if s != 0:
-                    model_name += [f'Models_{mt}/smoothed/{sym}_Md_space-{space}_K-{this_k}_smooth' \
-                                   f'-{s}_{train_ses}' for this_k in K for mt in model_type]
-                else:
-                    model_name += [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
-                                   for this_k in K for mt in model_type]
+                # model_name = []
+                # if s != 0:
+                #     model_name += [f'Models_{mt}/smoothed/{sym}_Md_space-{space}_K-{this_k}_smooth' \
+                #                    f'-{s}_{train_ses}' for this_k in K for mt in model_type]
+                # else:
+                #     model_name += [f'Models_{mt}/{sym}_Md_space-{space}_K-{this_k}_{train_ses}'
+                #                    for this_k in K for mt in model_type]
 
                 results, corrs = eval_smoothed(model_name, space=space, t_datasets=['MDTB'],
                                                train_ses=train_ses, test_ses=test_ses,
@@ -199,8 +199,7 @@ def plot_smooth_vs_unsmooth(D, test_s=0):
     crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
     for i, c in enumerate(crits):
         plt.subplot(3, 2, i*2 + 1)
-        sb.barplot(data=D, x='model_type', y=c, hue='train_smooth', errorbar="se")
-
+        sb.lineplot(data=D, x='train_smooth', y=c, errorbar="se",err_style="bars")
         # if 'coserr' in c:
         #     plt.ylim(0.4, 1)
         plt.subplot(3, 2, i*2 + 2)
@@ -236,6 +235,21 @@ def compare_diff_smooth(D, mt='03', outname='MDTB_cortex', save=False):
         plt.savefig('diff_Ktrue20_Kfit5to40.pdf', format='pdf')
     plt.show()
 
+def F_test(D, mt='03', value='dcbc_group'):
+    res_plot = D.loc[D.model_type==f'Models_{mt}']
+    arvg_dcbc = res_plot.groupby(['train_smooth','subj_num'])['dcbc_group','dcbc_indiv',
+                                                              'dcbc_indiv_em'].mean().reset_index()
+
+    new_DD = res_plot.loc[res_plot.test_sess=='s1']
+    new_DD[['dcbc_group','dcbc_indiv','dcbc_indiv_em']] = arvg_dcbc[['dcbc_group','dcbc_indiv',
+                                                                     'dcbc_indiv_em']]
+
+    # F-test
+    from statsmodels.stats.anova import AnovaRM
+    model = AnovaRM(new_DD, value, 'subj_num', within=['train_smooth'])
+    res = model.fit()
+    print(res)
+
 if __name__ == "__main__":
     ############# Fitting cortical models #############
     # 1. fit whole cortex (using symmetric arrangement)
@@ -243,26 +257,32 @@ if __name__ == "__main__":
     # fit_smooth(K=[100], smooth=[None], model_type='04',sym_type=['sym'], space='fs32k')
 
     # 2. fit single hemisphere (using asymmetric arrangement)
-    for mt in ['03','04']:
-        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-                   space='fs32k_L')
-        fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
-                   space='fs32k_R')
+    # for mt in ['03']:
+    #     fit_smooth(K=[17], smooth=[None,1,2,3,4,5,6,7], model_type=mt, sym_type=['asym'],
+    #                space='fs32k_L', arrange='independent')
+        # fit_smooth(K=[50], smooth=[None], model_type=mt, sym_type=['asym'],
+        #            space='fs32k_R', arrange='cRBM_Wc')
 
     ############# Convert fitted model to label cifti #############
-    fname = ['Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc']
-    ut.write_model_to_labelcifti(fname, align=False, col_names=None, load='all',
-                                 oname='Models_03/asym_Md_space-fs32k_L_K-50_ses-s1_cRBM_Wc_'
-                                       '10_step-0.2',
-                                 device='cuda')
+    # fname = [f'Models_03/asym_Md_space-fs32k_L_K-17_ses-s1_cRBM_Wc-{s}_step-0.5'
+    #          for s in np.linspace(1,31,16,dtype=int).tolist()]
+    # col_name = [f'theta_{s}' for s in np.linspace(1,31,16,dtype=int).tolist()]
+    # ut.write_model_to_labelcifti(fname, align=True, col_names=col_name, load='best',
+    #                              oname='Models_03/asym_Md_space-fs32k_L_K-17_ses-s1'
+    #                                    '_theta_1-31', device='cuda')
 
     ############# Evaluating models / plot wb-curves #############
-    # eval_smoothed_models(K=[50], model_type=['03'], space='fs32k_L', sym='asym',
-    #                      smooth=[0,1,2,3,4,5,6,7], save=True, plot_wb=True,
-    #                      outname='asym_K-50_Md_on_Sess_smooth')
+    eval_smoothed_models(K=[17], model_type=['03'], space='fs32k_L', sym='asym',
+                         smooth=[0,1,2,3,4,5,6,7], save=True, plot_wb=True,
+                         outname='asym_fs32k-L_K-17_Md_on_Sess_cRBM_Wc_1-31_group0')
+
+    ############# Repeated measure ANOVA #############
+    # fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-17_Md_on_Sess_smooth_group0.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # F_test(D, mt='03',value='dcbc_indiv')
 
     ############# Plotting comparison #############
-    fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-50_Md_on_Sess_smooth.tsv'
+    fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-17_Md_on_Sess_cRBM_Wc_0.1-4.0_group0.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
     plot_smooth_vs_unsmooth(D, test_s=0)
     compare_diff_smooth(D, mt='03')
