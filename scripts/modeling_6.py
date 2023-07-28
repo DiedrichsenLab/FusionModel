@@ -13,10 +13,10 @@ import numpy as np
 import Functional_Fusion.atlas_map as am
 import Functional_Fusion.matrix as matrix
 from Functional_Fusion.dataset import *
-import generativeMRF.emissions as em
-import generativeMRF.arrangements as ar
-import generativeMRF.full_model as fm
-import generativeMRF.evaluation as ev
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.full_model as fm
+import HierarchBayesParcel.evaluation as ev
 
 from scipy.linalg import block_diag
 import nibabel as nb
@@ -60,30 +60,6 @@ if not Path(base_dir).exists():
 
 atlas_dir = base_dir + f'/Atlases'
 res_dir = model_dir + f'/Results' + '/5.all_datasets_fusion'
-
-def get_cmap(mname, load_best=True, sym=False):
-    # Get model and atlas.
-    fileparts = mname.split('/')
-    split_mn = fileparts[-1].split('_')
-    if load_best:
-        info, model = load_batch_best(mname)
-    else:
-        info, model = load_batch_fit(mname)
-    atlas, ainf = am.get_atlas(info.atlas, atlas_dir)
-
-    # Get winner-take all parcels
-    Prob = np.array(model.marginal_prob())
-    parcel = Prob.argmax(axis=0) + 1
-
-    # Get parcel similarity:
-    w_cos_sim, _, _ = cl.parcel_similarity(model, plot=False, sym=sym)
-    W = sc.calc_mds(w_cos_sim, center=True)
-
-    # Define color anchors
-    m, regions, colors = sc.get_target_points(atlas, parcel)
-    cmap = sc.colormap_mds(W, target=(m, regions, colors), clusters=None, gamma=0.3)
-
-    return cmap.colors
 
 def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                   out_name=None, add_zero=False):
@@ -157,8 +133,9 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
                 train_part_vec = part_vec[train_indx]
 
             # 1. Run DCBC individual
+            dist = compute_dist(atlas.world.T, resolution=1)
             res_dcbc = run_dcbc(model_name, train_dat,
-                                test_dat, atlas,
+                                test_dat, dist,
                                 cond_vec=train_cond_vec,
                                 part_vec=train_part_vec,
                                 device='cuda')
@@ -175,7 +152,7 @@ def result_6_eval(model_name, K='10', t_datasets=['MDTB','Pontine','Nishimoto'],
         fname = f'/eval_all_asym_K-{K}_{out_name}_on_HcEven.tsv'
         results.to_csv(wdir + fname, index=False, sep='\t')
 
-def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
+def fit_rest_vs_task(datasets_list=[1,7], K=[34], sym_type=['asym'],
                      model_type=['03','04'], space='MNISymC3'):
     """Fitting model of task-datasets (MDTB out) + HCP (half subjects)
 
@@ -199,19 +176,21 @@ def fit_rest_vs_task(datasets_list = [1,7], K=[34], sym_type=['asym'],
     sub_list += [hcp_train]
     for t in model_type:
         for k in K:
-            writein_dir = ut.model_dir + f'/Models/Models_{t}/leaveNout'
+            writein_dir = ut.model_dir + f'/Models/Models_{t}'
             dataname = ''.join(T.two_letter_code[datasets_list])
-            nam = f'/asym_{dataname}_space-MNISymC3_K-{k}_hcpOdd'
-            if Path(writein_dir + nam + '.tsv').exists():
-                wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
-                                                    repeats=100, model_type=t,
-                                                    sym_type=sym_type,
-                                                    subj_list=sub_list,
-                                                    space=space)
-                fname = fname + f'_hcpOdd'
-                info.to_csv(wdir + fname + '.tsv', sep='\t')
-                with open(wdir + fname + '.pickle', 'wb') as file:
-                    pickle.dump(models, file)
+            nam = f'/asym_{dataname}_space-MNISymC3_K-{k}'
+            if not Path(writein_dir + nam + '.tsv').exists():
+                # wdir, fname, info, models = fit_all(set_ind=datasets_list, K=k,
+                #                                     repeats=100, model_type=t,
+                #                                     sym_type=sym_type,
+                #                                     subj_list=sub_list,
+                #                                     space=space)
+                fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=t,
+                        sym_type=sym_type, space=space)
+                # fname = fname + f'_hcpOdd'
+                # info.to_csv(wdir + fname + '.tsv', sep='\t')
+                # with open(wdir + fname + '.pickle', 'wb') as file:
+                #     pickle.dump(models, file)
             else:
                 print(f"Already fitted {dataname}, K={k}, Type={t}...")
 
@@ -250,7 +229,7 @@ def plot_result_6(D, t_data='MDTB'):
     plt.tight_layout()
     plt.show()
 
-def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6]):
+def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6], save=False):
     num_td = len(t_data)
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
 
@@ -277,19 +256,41 @@ def plot_loo_task_avrg(D, t_data=[0,1,2,3,4,5,6]):
 
         new_D = pd.concat([new_D, this_D], ignore_index=True)
 
+    df1 = new_D.loc[new_D.model_type == 'Models_03'].reset_index()
+    df2 = new_D.loc[new_D.model_type == 'Models_04'].reset_index()
+    df_toadd = df1.copy()
+
+    df_toadd.loc[:, 'dcbc_group'] = (df1.dcbc_group.to_numpy() + df2.dcbc_group.to_numpy())/2
+    df_toadd.loc[:, 'dcbc_indiv'] = (df1.dcbc_indiv.to_numpy() + df2.dcbc_indiv.to_numpy())/2
+    df_toadd['model_type'].replace(['Models_03'], 'Average', inplace=True)
+    new_D = pd.concat([new_D, df_toadd], ignore_index=True)
+
+    nums = [('Pontine',24), ('Nishimoto',32), ('IBC',38), ('WMFS',50), ('Demand',66),
+            ('Somatotopic', 103)]
+    for (td, i) in nums:
+        new_D.loc[new_D.test_data == td, 'subj_num'] += i
+
     plt.figure(figsize=(10, 10))
     crits = ['dcbc_group', 'dcbc_indiv']
     for i, c in enumerate(crits):
         plt.subplot(2, 2, i * 2 + 1)
         sb.barplot(data=new_D, x='train_data', order=['rest','task','task+rest'],
-                   y=c, hue='model_type', errorbar="se")
+                   y=c, hue='model_type', errorbar="se", palette=sb.color_palette()[1:4])
+        if c == 'dcbc_group':
+            plt.ylim(0.06, 0.11)
+        elif c == 'dcbc_indiv':
+            plt.ylim(0.19, 0.225)
 
         plt.subplot(2, 2, i * 2 + 2)
         sb.lineplot(data=new_D, x='K', y=c, hue='train_data',hue_order=['rest','task','task+rest'],
-                    style="model_type", errorbar='se', markers=False)
+                    style="model_type", errorbar='se', markers=False,
+                    palette=sb.color_palette()[1:4])
 
     plt.suptitle(f'Averaged leaveOneOut: Task, rest, task+rest, test_data=Tasks')
     plt.tight_layout()
+
+    if save:
+        plt.savefig('task_vs_rest_loo.pdf', format='pdf')
     plt.show()
 
 
@@ -369,12 +370,12 @@ def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
 
 if __name__ == "__main__":
     ############# Fitting models #############
-    # for i in range(0,7):
+    # for i in [6,5,4,3,2,1,0]:
     #     datasets_list = [0, 1, 2, 3, 4, 5, 6, 7]
     #     datasets_list.remove(i)
     #     print(datasets_list)
     #     fit_rest_vs_task(datasets_list=datasets_list, K=[10,17,20,34,40,68,100],
-    #                      sym_type=['asym'], model_type=['03','04'], space='MNISymC3')
+    #                      sym_type=['asym'], model_type=['03'], space='MNISymC3')
 
     ############# Evaluating models (on task) #############
     # model_type = ['03', '04']
@@ -431,11 +432,11 @@ if __name__ == "__main__":
 
     ############# Plot evaluation #############
     # 1. evaluation on Task
-    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
-    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_MdPoNiIbWmSoHcOdd_on_De.tsv'
-    D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
-    plot_loo_task_avrg(D)
+    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
+    # # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_MdPoNiIbWmSoHcOdd_on_De.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # # plot_loo_task(D, t_data=[0,1,2,3,4,5,6], model_type='03')
+    # plot_loo_task_avrg(D, save=True)
 
     # 2. evaluation on rest
     # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
@@ -443,25 +444,43 @@ if __name__ == "__main__":
     # plot_loo_rest(D, model_type='03')
 
     # 3. Plot evaluation of result 6
-    fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
-    fname2 = f'/Models/Evaluation/eval_dataset7_asym.tsv'
-    D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
-    D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
-    D2 = D2.drop(['coserr_group', 'coserr_floor', 'coserr_ind2', 'coserr_ind3'], axis=1)
-    D2.rename(columns={'session': 'test_sess'}, inplace=True)
-    D1 = D1[D2.columns]
-    D = pd.concat([D2, D1])
-    D = D.reindex(columns=D2.columns)
-    plot_result_6(D, t_data='MDTB')
+    # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'
+    # fname2 = f'/Models/Evaluation/eval_dataset7_asym.tsv'
+    # D1 = pd.read_csv(model_dir + fname1, delimiter='\t')
+    # D2 = pd.read_csv(model_dir + fname2, delimiter='\t')
+    # D2 = D2.drop(['coserr_group', 'coserr_floor', 'coserr_ind2', 'coserr_ind3'], axis=1)
+    # D2.rename(columns={'session': 'test_sess'}, inplace=True)
+    # D1 = D1[D2.columns]
+    # D = pd.concat([D2, D1])
+    # D = D.reindex(columns=D2.columns)
+    # plot_result_6(D, t_data='MDTB')
 
     ############# Plot fusion atlas #############
     # Making color map
-    # K = 34
-    # fname = [f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}',
-    #          f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-{K}_hcpOdd',
-    #          f'/Models_03/leaveNout/asym_PoNiIbWmDeSoHc_space-MNISymC3_K-{K}_hcpOdd']
-    # colors = get_cmap(f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{K}')
+    K = [34]
+    model_type = ['03']
+    fname = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34',
+             f'/Models_03/leaveNout/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-34_hcpOdd',
+             f'/Models_03/leaveNout/asym_Hc_space-MNISymC3_K-34_hcpOdd']
+    colors = ut.get_cmap(f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-34')
+    # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    # results = pd.DataFrame()
+    # model_name = []
+    # for i in range(0, 7):
+    #     datasets_list = [0, 1, 2, 3, 4, 5, 6]
+    #     datasets_list.remove(i)
+    #     dataname = ''.join(T.two_letter_code[datasets_list])
+    #     # Pure Task
+    #     model_name += [f'Models_{mt}/asym_{dataname}_space-MNISymC3_K-{this_k}'
+    #                    for this_k in K for mt in model_type]
+    #     # Task+rest
+    #     model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                    for this_k in K for mt in model_type]
     #
-    # plt.figure(figsize=(20, 10))
-    # plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
-    # plt.show()
+    # # Pure Rest
+    # model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{this_k}_hcpOdd'
+    #                for this_k in K for mt in model_type]
+    #
+    plt.figure(figsize=(10, 10))
+    plot_model_parcel(fname, [1, 3], cmap=colors, align=True, device='cuda')
+    plt.show()

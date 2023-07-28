@@ -13,10 +13,10 @@ import numpy as np
 import Functional_Fusion.atlas_map as am
 import Functional_Fusion.matrix as matrix
 from Functional_Fusion.dataset import *
-import generativeMRF.emissions as em
-import generativeMRF.arrangements as ar
-import generativeMRF.full_model as fm
-import generativeMRF.evaluation as ev
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.full_model as fm
+import HierarchBayesParcel.evaluation as ev
 
 from scipy.linalg import block_diag
 import nibabel as nb
@@ -30,8 +30,8 @@ import time
 import pickle
 from copy import copy,deepcopy
 from itertools import combinations
-from ProbabilisticParcellation.util import *
-from ProbabilisticParcellation.evaluate import *
+from FusionModel.util import *
+from FusionModel.evaluate import *
 
 # pytorch cuda global flag
 # pt.cuda.is_available = lambda : False
@@ -256,7 +256,7 @@ if __name__ == "__main__":
             D, Us = result_1_eval(model_type=model_type, model_name=model_name, infer_model='VMF',
                                   oname=None)
 
-    result_1_plot_curve(fname,crits=['dcbc'], oname=model_type + f'_{model_name}.pdf', save=True)
+    result_1_plot_curve(fname,crits=['dcbc'], oname=model_type + f'_{model_name}.pdf', save=False)
 
     ########## Making color map ##########
     # D1, Us1 = result_1_eval(model_type='Models_03', model_name='asym_Md_space-MNISymC3_K-17',
