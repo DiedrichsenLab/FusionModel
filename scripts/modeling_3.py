@@ -192,16 +192,21 @@ def result_3_eval_on_otherData(K=10, model_type=['03','04'], ses1=None, ses2=Non
             train_indx = tinfo[indivtrain_ind] == indivtrain_values
             test_indx = tinfo[indivtrain_ind] != indivtrain_values
             # 1. Run DCBC individual
-            res_dcbc = run_dcbc(model_name, tdata, atlas,
-                               train_indx=train_indx,
-                               test_indx=test_indx,
-                               cond_vec=cond_vec,
-                               part_vec=part_vec,
-                               device='cuda')
-            res_dcbc['indivtrain_ind'] = indivtrain_ind
-            res_dcbc['indivtrain_val'] = indivtrain_values
-            res_dcbc['test_data'] = ds
-            res = pd.concat([res, res_dcbc], ignore_index=True)
+            # res_dcbc = run_dcbc(model_name, tdata, atlas,
+            #                    train_indx=train_indx,
+            #                    test_indx=test_indx,
+            #                    cond_vec=cond_vec,
+            #                    part_vec=part_vec,
+            #                    device='cuda')
+            # res_dcbc['indivtrain_ind'] = indivtrain_ind
+            # res_dcbc['indivtrain_val'] = indivtrain_values
+            # res_dcbc['test_data'] = ds
+            # 2. Run coserr individual
+            res_coserr = run_prederror(model_name, ds, 'all', cond_ind=None,
+                                       part_ind='half', eval_types=['group', 'floor'],
+                                       indivtrain_ind='half', indivtrain_values=[1, 2],
+                                       device='cuda')
+            res = pd.concat([res, res_coserr], ignore_index=True)
 
         results = pd.concat([results, res], ignore_index=True)
 
@@ -210,7 +215,7 @@ def result_3_eval_on_otherData(K=10, model_type=['03','04'], ses1=None, ses2=Non
     if (ses1 is not None) and (ses2 is not None):
         fname = f'/eval_all_asym_Ib_K-{K}_{ses1}+{ses2}_on_leftSess.tsv'
     else:
-        fname = f'/eval_all_asym_Ib_K-{K}_twoSess_on_otherDataset.tsv'
+        fname = f'/eval_all_asym_Ib_K-{K}_twoSess_on_otherDataset_cosine.tsv'
     results.to_csv(wdir + fname, index=False, sep='\t')
 
 def result_3_plot(D, train_model='IBC', ck=None, style=None, style_order=None,
@@ -557,9 +562,9 @@ if __name__ == "__main__":
     # plt.show()
     ##### 1. Evaluate all two sessions fusion tested on 12 leftout sessions
     ##### The number of combination = 91 (pick 2 from 14)
-    # for k in [10,20,34,40,68,100]:
-    #     result_3_eval(K=k, model_type=['01','03','04'])
-    #     # result_3_eval_on_otherData(K=k, model_type=['01','03','04'])
+    for k in [68,100]:
+        # result_3_eval(K=k, model_type=['01','03','04'])
+        result_3_eval_on_otherData(K=k, model_type=['01','03','04'])
 
     D = pd.read_csv(model_dir +
                      f'/Models/Evaluation/eval_all_asym_Ib_K-10to100_twoSess_on_otherDataset.tsv',

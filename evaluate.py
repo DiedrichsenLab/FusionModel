@@ -438,11 +438,20 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
             indivtrain_em.initialize(train_data)
             model.emissions = [indivtrain_em]
             model.initialize()
-            # Gets us the individual parcellation
-            model, _, _, U_indiv = model.fit_em(iter=200, tol=0.1,
-                                                fit_emission=True,
-                                                fit_arrangement=False,
-                                                first_evidence=False)
+            if model.arrange.name == 'cRBM_Wc':
+                model, _, _, U_indiv = model.fit_sml(iter=100,
+                                                     batch_size=model.nsubj,
+                                                     stepsize=model.arrange.alpha,
+                                                     fit_arrangement=False,
+                                                     fit_emission=True,
+                                                     verbose=False)
+            else:
+                # Gets us the individual parcellation
+                model, _, _, U_indiv = model.fit_em(iter=200, tol=0.1,
+                                                    fit_emission=True,
+                                                    fit_arrangement=False,
+                                                    first_evidence=False)
+
             emloglik = model.emissions[0].Estep()
 
         # ------------------------------------------

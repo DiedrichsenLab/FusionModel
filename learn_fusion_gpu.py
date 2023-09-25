@@ -27,8 +27,8 @@ import time
 import FusionModel.util as ut
 
 
-def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
-                    type=None, part_ind=None, subj=None, join_sess=True,
+def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None, type=None,
+                    part_ind=None, part_num=None, subj=None, join_sess=True,
                     join_sess_part=False, smooth=None, hemis=None):
     """Builds list of datasets, cond_vec, part_vec, subj_ind
     from different data sets
@@ -80,14 +80,18 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
             part_ind[i] = ds.part_ind
         # Make different sessions either the same or different
         if join_sess:
-            data.append(dat)
-            cond_vec.append(info[cond_ind[i]].values.reshape(-1, ))
-
+            if part_num is not None:
+                indx = info[part_ind[i]] == part_num
+            else:
+                indx = np.full(info[part_ind[i]].shape, True)
             # Check if we want to set no partition after join sessions
             if join_sess_part:
-                part_vec.append(np.ones(info[part_ind[i]].shape))
+                part_vec.append(np.ones(indx.shape))
             else:
-                part_vec.append(info[part_ind[i]].values.reshape(-1, ))
+                part_vec.append(info[part_ind[i]].values[indx].reshape(-1, ))
+
+            data.append(dat[:, indx, :])
+            cond_vec.append(info[cond_ind[i]].values[indx].reshape(-1, ))
             subj_ind.append(np.arange(sub, sub + n_subj))
         else:
             if sess[i] == 'all':
@@ -96,7 +100,10 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
                 sessions = sess[i]
             # Now build and split across the correct sessions:
             for s in sessions:
-                indx = info.sess == s
+                if part_num is None:
+                    indx = info.sess == s
+                else:
+                    indx = (info.sess == s) & (info[part_ind[i]] == part_num)
                 data.append(dat[:, indx, :])
                 cond_vec.append(info[cond_ind[i]].values[indx].reshape(-1, ))
                 part_vec.append(info[part_ind[i]].values[indx].reshape(-1, ))
@@ -107,7 +114,7 @@ def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
 
 def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
                 uniform_kappa=True, weighting=None, epos_iter=5, eneg_iter=5,
-                num_chain=20, Wc=None, theta=None):
+                num_chain=20, Wc=None, theta=None, sess=None):
     """ Builds a Full model based on your specification"""
     if arrange == 'independent':
         if sym_type == 'sym':
@@ -138,6 +145,8 @@ def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
         ar_model = ar.wcmDBM(K, atlas.P, Wc=Wc, theta=theta, eneg_iter=eneg_iter,
                              epos_iter=epos_iter, eneg_numchains=num_chain)
         ar_model.name = 'cRBM_Wc'
+        ar_model.momentum = False
+        ar_model.fit_W = False
     else:
         raise (NameError(f'unknown arrangement model:{arrange}'))
 
@@ -149,6 +158,10 @@ def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
                                  X=matrix.indicator(cond_vec[j]),
                                  part_vec=part_vec[j],
                                  uniform_kappa=uniform_kappa)
+            trained_emi = f'Models_03/asym_Ib_space-fs32k_L_K-{K}_independent'
+            _, model = ut.load_batch_best(trained_emi, device='cuda')
+            em_model.V = model.emissions[j].V
+            em_model.kappa = model.emissions[j].kappa
         elif emission == 'GMM':
             em_model = em.MixGaussian(K=K, P=atlas.P,
                                       X=matrix.indicator(cond_vec[j]),
@@ -181,10 +194,12 @@ def batch_fit(datasets, sess,
               uniform_kappa=True,
               join_sess=True,
               join_sess_part=False,
+              part_num=None,
               weighting=None,
               smooth=None,
               hemis=None,
-              second_converge=True):
+              second_converge=True,
+              Wc_theta=1):
     """ Executes a set of fits starting from random starting values
     selects the best one from a batch and saves them
 
@@ -216,6 +231,7 @@ def batch_fit(datasets, sess,
                                                          cond_ind=cond_ind,
                                                          type=type,
                                                          part_ind=part_ind,
+                                                         part_num=part_num,
                                                          subj=subj,
                                                          join_sess=join_sess,
                                                          join_sess_part=join_sess_part,
@@ -226,7 +242,7 @@ def batch_fit(datasets, sess,
 
     # Load all necessary data and designs
     n_sets = len(data)
-    n_subj = sum(len(sublist) for sublist in subj_ind)
+    n_subj = np.unique(np.stack(subj_ind)).size
     if hemis == 'L':
         atlas, _ = am.get_atlas('fs32k_L', ut.atlas_dir)
     elif hemis == 'R':
@@ -248,7 +264,8 @@ def batch_fit(datasets, sess,
     else:
         Wc = None
     M = build_model(K, arrange, sym_type, emission, atlas, cond_vec,
-                    part_vec, uniform_kappa, weighting, Wc=Wc, num_chain=n_subj)
+                    part_vec, uniform_kappa, weighting, Wc=Wc, theta=Wc_theta,
+                    num_chain=n_subj, sess=sess)
 
     del Wc
     pt.cuda.empty_cache()
@@ -297,14 +314,14 @@ def batch_fit(datasets, sess,
                 first_iter=first_iter, verbose=False)
         elif m.arrange.name.startswith('cRBM'):
             m.random_params(init_arrangement=True,
-                            init_emission=True)
+                            init_emission=False)
             m, ll, theta, _ = m.fit_sml(
                 iter=n_iter,
-                batch_size=8,
-                stepsize=0.1,
+                batch_size=6,
+                stepsize=0.5,
                 seperate_ll=False,
                 fit_arrangement=True,
-                fit_emission=True)
+                fit_emission=False)
             tt[i] = theta.cpu().numpy()
 
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
@@ -355,7 +372,8 @@ def batch_fit(datasets, sess,
 
 def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
             sym_type=['asym', 'sym'], arrange='independent', subj_list=None,
-            weighting=None, this_sess=None, space=None, smooth=None, sc=True):
+            weighting=None, this_sess=None, space=None, smooth=None,
+            sc=True, Wc_theta=1, part_num=None):
     # Get dataset info
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     datasets = T.name.to_numpy()
@@ -427,22 +445,27 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  sym_type=mname,
                                  name=name,
                                  n_inits=50,
-                                 n_iter=30,
+                                 n_iter=100,
                                  n_rep=repeats,
                                  first_iter=30,
                                  join_sess=join_sess,
                                  join_sess_part=join_sess_part,
+                                 part_num=part_num,
                                  uniform_kappa=uniform_kappa,
                                  weighting=weighting,
                                  smooth=smooth,
                                  hemis=hemis,
-                                 second_converge=sc)
+                                 second_converge=sc,
+                                 Wc_theta=Wc_theta)
 
         # Save the fits and information
         wdir = ut.model_dir + f'/Models/Models_{model_type}'
-        fname = f'/{name}_space-{this_space}_K-{K}'
+        fname = f'/{name}_space-{this_space}_K-{K}_cRBM_Wc-{Wc_theta}'
 
         if this_sess is not None:
+            return wdir, fname, info, models
+
+        if part_num is not None:
             return wdir, fname, info, models
 
         if subj_list is not None:

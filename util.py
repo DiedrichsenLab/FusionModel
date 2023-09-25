@@ -20,11 +20,11 @@ import scipy.ndimage as snd
 
 # Set directories for the entire project - just set here and import everywhere
 # else
-model_dir = 'Y:/data/Cortex/ProbabilisticParcellationModel'
+model_dir = 'Y:/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
-    model_dir = '/srv/diedrichsen/data/Cortex/ProbabilisticParcellationModel'
+    model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
-    model_dir = '/Volumes/diedrichsen_data$/data/Cortex/ProbabilisticParcellationModel'
+    model_dir = '/Volumes/diedrichsen_data$/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/Users/callithrix/Documents/Projects/Functional_Fusion/'
 if not Path(model_dir).exists():
@@ -157,7 +157,7 @@ def load_batch_best(fname, device=None):
     info_reduced = info.iloc[j]
     return info_reduced, best_model
 
-def get_fs32k_neighbours(surf, include_self=True, remove_mw=True, return_type='pt_csr'):
+def get_fs32k_neighbours(include_self=True, remove_mw=True, return_type='pt_csr'):
     '''Compute the neighbouring matrix of cortical mash
 
     :param file: the cortical mash file (e.g surf.gii)
@@ -167,14 +167,8 @@ def get_fs32k_neighbours(surf, include_self=True, remove_mw=True, return_type='p
     '''
     atlas, info = am.get_atlas('fs32k', atlas_dir=base_dir + '/Atlases')
 
-    if not Path(surf).exists():
-        raise (NameError('Could not find file'))
-    elif isinstance(surf, str):
-        mat = nb.load(surf)
-        surf = [x.data for x in mat.darrays]
-    else:
-        # NiBabel can handle if input is not GiftiImage object
-        surf = [x.data for x in surf.darrays]
+    mat = nb.load(atlas_dir + '/tpl-fs32k/tpl_fs32k_hemi-L_sphere.surf.gii')
+    surf = [x.data for x in mat.darrays]
 
     surf_vertices = surf[0]
     surf_faces = surf[1]
