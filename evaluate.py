@@ -6,10 +6,10 @@ import numpy as np
 import Functional_Fusion.atlas_map as am
 import Functional_Fusion.matrix as matrix
 import Functional_Fusion.dataset as ds
-import generativeMRF.emissions as em
-import generativeMRF.arrangements as ar
-import generativeMRF.full_model as fm
-import generativeMRF.evaluation as ev
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.full_model as fm
+import HierarchBayesParcel.evaluation as ev
 import FusionModel.util as ut
 
 from scipy.linalg import block_diag
@@ -110,14 +110,14 @@ def calc_test_error(M, tdata, U_hats):
     return pred_err
 
 
-def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
-                   trim_nan=False, verbose=True):
+def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
+                   trim_nan=False, return_wb_corr=False, verbose=True):
     """DCBC: evaluate the resultant parcellation using DCBC
     Args:
         parcels (np.ndarray): the input parcellation:
             either group parcellation (1-dimensional: P)
             individual parcellation (num_subj x P )
-        dist (<AtlasVolumetric>): the class object of atlas
+        dist (pt.Tensor): the distance metric
         testdata (np.ndarray): the functional test dataset,
                                 shape (num_sub, N, P)
         trim_nan (boolean): if true, make the nan voxel label will be
@@ -127,11 +127,12 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
     Returns:
         dcbc_values (np.ndarray): the DCBC values of subjects
     """
-    if trim_nan:  # mask the nan voxel pairs distance to nan
-        dist[pt.where(pt.isnan(parcels))[0], :] = pt.nan
-        dist[:, pt.where(pt.isnan(parcels))[0]] = pt.nan
+    if trim_nan:
+        # mask the nan voxel pairs distance to nan for non-sparse tensor
+        dist[pt.where(pt.isnan(parcels))[0], :] = 0
+        dist[:, pt.where(pt.isnan(parcels))[0]] = 0
 
-    dcbc_values = []
+    dcbc_values, D_all = [], []
     for sub in range(testdata.shape[0]):
         print(f'Subject {sub}', end=':')
         tic = time.perf_counter()
@@ -144,9 +145,16 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=110, bin_width=5,
                              parcellation=parcels[sub],
                              dist=dist, func=testdata[sub].T)
         dcbc_values.append(D['DCBC'])
+        # within.append(pt.stack(D['corr_within']))
+        # between.append(pt.stack(D['corr_between']))
+        D_all.append(D)
         toc = time.perf_counter()
         print(f"{toc-tic:0.4f}s")
-    return pt.stack(dcbc_values)
+
+    if return_wb_corr:
+        return pt.stack(dcbc_values), D_all
+    else:
+        return pt.stack(dcbc_values)
 
 
 def run_prederror(model_names, test_data, test_sess, cond_ind,
@@ -297,12 +305,12 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
     """ Run DCBC group evaluation
 
     Args:
-        par_names (list): List of names for the parcellations to evaluate    
-                Can be either 
-                    nifti files (*_dseg.nii) or 
+        par_names (list): List of names for the parcellations to evaluate
+                Can be either
+                    nifti files (*_dseg.nii) or
                     models (*.npy)
-        space (str): Atlas space (SUIT3, MNISym3C)... 
-        test_data (str): Data set string 
+        space (str): Atlas space (SUIT3, MNISym3C)...
+        test_data (str): Data set string
         test_sess (str, optional): Data set test. Defaults to 'all'.
 
     Returns:
@@ -356,8 +364,8 @@ def run_dcbc_group(par_names, space, test_data, test_sess='all', saveFile=None,
     return results
 
 
-def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
-             part_vec, device=None, load_best=True, verbose=True):
+def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
+             device=None, return_wb=False, verbose=False, same_subj=False):
     """ Calculates DCBC using a test_data set. The test data splitted into
         individual training and test set given by `train_indx` and `test_indx`.
         First we use individual training data to derive an individual
@@ -368,15 +376,19 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
     Args:
         model_names (list or str): Name of model fit (tsv/pickle file)
         tdata (pt.Tensor or np.ndarray): test data set
-        atlas (atlas_map): The atlas map object for calculating voxel distance
-        train_indx (ndarray of index or boolean mask): index of individual
-            training data
-        test_indx (ndarray or index boolean mask): index of individual test
-            data
+        train_data (np.ndarray or pt.Tensor): individual training data
+        test_data (np.ndarray or pt.Tensor): individual test data
+        dist (pt.Tensor or sparse tensor): distance metric
         cond_vec (1d array): the condition vector in test-data info
         part_vec (1d array): partition vector in test-data info
         device (str): the device name to load trained model
         load_best (str): I don't know
+        verbose (boolean): report cuda memory usage
+        same_subj (boolean): If True, the given individual training data
+            matches the data used for input fitted model, meaning they
+            are from the same subjects and the individual parcellation.
+            Otherwise, the invididual train/test data are from other
+            datasets with different subjects from the fitted model.
     Returns:
         data-frame with model evalution of both group and individual DCBC
     Notes:
@@ -384,8 +396,6 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
         in general case (not include IBC two sessions evaluation senario)
         requested by Jorn.
     """
-    # Calculate distance metric given by input atlas
-    dist = compute_dist(atlas.world.T, resolution=1)
     # convert tdata to tensor
     if type(train_data) is np.ndarray:
         train_data = pt.tensor(train_data, dtype=pt.get_default_dtype())
@@ -397,43 +407,95 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
 
     num_subj = test_data.shape[0]
     results = pd.DataFrame()
+    corr_all = []
     # Now loop over possible models we want to evaluate
     for i, model_name in enumerate(model_names):
         print(f"Doing model {model_name}\n")
         if verbose:
             ut.report_cuda_memory()
-        if load_best:
-            minfo, model = load_batch_best(f"{model_name}", device=device)
-        else:
-            minfo, model = load_batch_fit(f"{model_name}")
-            minfo = minfo.iloc[0]
 
+        minfo, model = load_batch_best(f"{model_name}", device=device)
         Prop = model.marginal_prob()
         this_res = pd.DataFrame()
-        # ------------------------------------------
-        # Train an emission model on the individual training data
-        # and get a Uhat (individual parcellation) from it.
-        indivtrain_em = em.MixVMF(K=minfo.K, N=40,
-                                  P=model.emissions[0].P,
-                                  X=matrix.indicator(cond_vec),
-                                  part_vec=part_vec,
-                                  uniform_kappa=model.emissions[0].uniform_kappa)
-        indivtrain_em.initialize(train_data)
-        model.emissions = [indivtrain_em]
-        model.initialize()
-        # Gets us the individual parcellation
-        model, _, _, U_indiv = model.fit_em(iter=200, tol=0.1,
-                                            fit_emission=True,
-                                            fit_arrangement=False,
-                                            first_evidence=False)
-        U_indiv = model.remap_evidence(U_indiv)
+        if same_subj:
+            # If the training dataset comes from the same subjects, we
+            # can get the individual parcellations directly by E-step
+            if not isinstance(train_data, list):
+                train_data = [train_data]
+
+            model.initialize(train_data)
+            emloglik = model.collect_evidence([e.Estep() for e in model.emissions])
+            U_indiv =  model.Estep()[0]
+        else:
+            # ------------------------------------------
+            # Train an emission model on the individual training data
+            # and get a Uhat (individual parcellation) from it.
+            indivtrain_em = em.MixVMF(K=minfo.K, N=40,
+                                      P=model.emissions[0].P,
+                                      X=matrix.indicator(cond_vec),
+                                      part_vec=part_vec,
+                                      uniform_kappa=model.emissions[0].uniform_kappa)
+            indivtrain_em.initialize(train_data)
+            model.emissions = [indivtrain_em]
+            model.initialize()
+            # Gets us the individual parcellation
+            model, _, _, U_indiv = model.fit_em(iter=200, tol=0.1,
+                                                fit_emission=True,
+                                                fit_arrangement=False,
+                                                first_evidence=False)
+            emloglik = model.emissions[0].Estep()
 
         # ------------------------------------------
         # Now run the DCBC evaluation fo the group and individuals
+        U_indiv_em = model.remap_evidence(pt.softmax(emloglik, dim=1))
+        U_indiv = model.remap_evidence(U_indiv)
         Pgroup = pt.argmax(Prop, dim=0) + 1
         Pindiv = pt.argmax(U_indiv, dim=1) + 1
-        dcbc_group = calc_test_dcbc(Pgroup, test_data, dist)
-        dcbc_indiv = calc_test_dcbc(Pindiv, test_data, dist)
+        Pindiv_em = pt.argmax(U_indiv_em, dim=1) + 1
+
+        # Release cuda cache for saving memory
+        del emloglik, Prop, U_indiv, U_indiv_em
+        pt.cuda.empty_cache()
+
+        # ------------------------------------------
+        # Calculate the DCBC for group and individual
+        dcbc_group,D1 = calc_test_dcbc(Pgroup, test_data, dist, return_wb_corr=True)
+        dcbc_indiv,D2 = calc_test_dcbc(Pindiv, test_data, dist, return_wb_corr=True)
+        dcbc_indiv_em,D3 = calc_test_dcbc(Pindiv_em, test_data, dist, return_wb_corr=True)
+        if return_wb:
+            D = {"model_name": model_name,
+                 "group_within": pt.stack([pt.stack(this_d['corr_within'])
+                                           for this_d in D1]).cpu().numpy(),
+                 "group_between": pt.stack([pt.stack(this_d['corr_between'])
+                                            for this_d in D1]).cpu().numpy(),
+                 "group_numW": pt.stack([pt.stack(this_d['num_within'])
+                                           for this_d in D1]).cpu().numpy(),
+                 "group_numB": pt.stack([pt.stack(this_d['num_between'])
+                                            for this_d in D1]).cpu().numpy(),
+                 "indiv_within": pt.stack([pt.stack(this_d['corr_within'])
+                                           for this_d in D2]).cpu().numpy(),
+                 "indiv_between": pt.stack([pt.stack(this_d['corr_between'])
+                                            for this_d in D2]).cpu().numpy(),
+                 "indiv_numW": pt.stack([pt.stack(this_d['num_within'])
+                                           for this_d in D2]).cpu().numpy(),
+                 "indiv_numB": pt.stack([pt.stack(this_d['num_between'])
+                                            for this_d in D2]).cpu().numpy(),
+                 "indiv_em_within": pt.stack([pt.stack(this_d['corr_within'])
+                                              for this_d in D3]).cpu().numpy(),
+                 "indiv_em_between": pt.stack([pt.stack(this_d['corr_between'])
+                                               for this_d in D3]).cpu().numpy(),
+                 "indiv_em_numW": pt.stack([pt.stack(this_d['num_within'])
+                                              for this_d in D3]).cpu().numpy(),
+                 "indiv_em_numB": pt.stack([pt.stack(this_d['num_between'])
+                                               for this_d in D3]).cpu().numpy(),
+                 "group_weight": pt.stack([this_d['weight']
+                                           for this_d in D1]).cpu().numpy(),
+                 "indiv_weight": pt.stack([this_d['weight']
+                                           for this_d in D2]).cpu().numpy(),
+                 "indiv_em_weight": pt.stack([this_d['weight']
+                                              for this_d in D3]).cpu().numpy(),
+                 "model_name": model_name}
+            corr_all.append(D)
 
         # ------------------------------------------
         # Collect the information from the evaluation
@@ -451,6 +513,7 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
         # Add all the evaluations to the data frame
         ev_df['dcbc_group'] = dcbc_group.cpu()
         ev_df['dcbc_indiv'] = dcbc_indiv.cpu()
+        ev_df['dcbc_indiv_em'] = dcbc_indiv_em.cpu()
         this_res = pd.concat([this_res, ev_df], ignore_index=True)
 
         # Concate model type
@@ -462,8 +525,10 @@ def run_dcbc(model_names, train_data, test_data, atlas, cond_vec,
             this_res['test_sess'] = 'all'
         results = pd.concat([results, this_res], ignore_index=True)
 
-    return results
-
+    if return_wb:
+        return results, corr_all
+    else:
+        return results
 
 def run_dcbc_IBC(model_names, test_data, test_sess,
                  cond_ind=None, part_ind=None,
@@ -645,7 +710,7 @@ def eval_all_prederror(model_type, prefix, K, verbose=True):
 
 
 def eval_all_dcbc(model_type, prefix, K, space='MNISymC3', models=None, fname_suffix=None, verbose=True):
-    """ Calculates DCBC over all models. 
+    """ Calculates DCBC over all models.
 
         Args:
         model_type (str): Name of model type
@@ -727,20 +792,5 @@ def concat_all_prederror(model_type, prefix, K, outfile):
     oname = base_dir + \
         f'/Models/Evaluation_{model_type}/eval_prederr_{outfile}.tsv'
     D.to_csv(oname, index=False, sep='\t')
-
-    pass
-
-
-if __name__ == "__main__":
-
-    # model_type='04'
-    # sym='asym'
-    # fname_suffix='HCPw_asym'
-
-    # # Evaluate DCBC
-    # eval_all_dcbc(model_type=model_type,prefix=sym,K=K,space = 'MNISymC3', models=hcp_models, fname_suffix=fname_suffix)
-
-    # Concat DCBC
-    # concat_all_prederror(model_type=model_type,prefix=sym,K=Ks,outfile=fname_suffix)
 
     pass

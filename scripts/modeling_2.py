@@ -16,14 +16,15 @@ import matplotlib.pyplot as plt
 from scipy.linalg import block_diag
 
 # for testing and evaluating models
-from generativeMRF.full_model import FullModel, FullMultiModel
-import generativeMRF.arrangements as ar
-import generativeMRF.emissions as em
-import generativeMRF.spatial as sp
-import generativeMRF.evaluation as ev
+from HierarchBayesParcel.full_model import FullMultiModel
+from HierarchBayesParcel.depreciated.full_model_symmetric import FullModel
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.spatial as sp
+import HierarchBayesParcel.evaluation as ev
 from sklearn.metrics.pairwise import cosine_similarity
-from ProbabilisticParcellation.util import *
-from ProbabilisticParcellation.evaluate import calc_test_dcbc
+from FusionModel.util import *
+from FusionModel.evaluate import calc_test_dcbc
 
 # pytorch cuda global flag
 pt.set_default_tensor_type(pt.cuda.FloatTensor
@@ -880,44 +881,44 @@ def compare_diffK(generate_ck=False, save=False):
 
 if __name__ == '__main__':
     ########## session fusion (same subjects, different Ks) ##########
-    # conditions = [([0.5,0.8], 1.1, 1.1, True),
-    #               ([0.2,0.5], 1.1, 1.1, True),
-    #               ([0.2,0.2], 0.1, 1.1, False),
-    #               ([0.8,0.8], 0.1, 1.1, False)]
-    # conditions = [([0.5,0.8], 0.8, 1.1, False)]
-    # for i, (noise_level,low,high,re) in enumerate(conditions):
-    #     D = pd.DataFrame()
-    #     for k in [20]:
-    #         res = simulation_3(K_true=20, K=k, width=50,
-    #                            nsub_list=np.array([10, 10]),
-    #                            M=np.array([40, 20], dtype=int),
-    #                            num_part=1, sigma2=noise_level,
-    #                            low=low, high=high,
-    #                            iter=10, relevant=re)
-    #         D = pd.concat([D, res], ignore_index=True)
-    #     D.to_csv(f'eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv', index=False, sep='\t')
+    conditions = [([0.5,0.8], 1.1, 1.1, True),
+                  ([0.2,0.5], 1.1, 1.1, True),
+                  ([0.2,0.2], 0.1, 1.1, False),
+                  ([0.8,0.8], 0.1, 1.1, False)]
+    conditions = [([0.5,0.8], 0.8, 1.1, False)]
+    for i, (noise_level,low,high,re) in enumerate(conditions):
+        D = pd.DataFrame()
+        for k in [20]:
+            res = simulation_3(K_true=20, K=k, width=50,
+                               nsub_list=np.array([10, 10]),
+                               M=np.array([40, 20], dtype=int),
+                               num_part=1, sigma2=noise_level,
+                               low=low, high=high,
+                               iter=10, relevant=re)
+            D = pd.concat([D, res], ignore_index=True)
+        D.to_csv(f'eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv', index=False, sep='\t')
 
-    # fname = model_dir + f'/Results/2.simulation/eval_Ktrue_20_Kfit_5to40_all_models.tsv'
-    # D = pd.read_csv(fname, delimiter='\t')
-    #_plot_diffK(D, style="common_kappa", save=False)
+    fname = model_dir + f'/Results/2.simulation/eval_Ktrue_20_Kfit_5to40_all_models.tsv'
+    D = pd.read_csv(fname, delimiter='\t')
+    _plot_diffK(D, style="common_kappa", save=False)
 
-    ########## Comparing model 1 and 3 ##########
-    # fname = model_dir + f'/Results/2.simulation/eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv'
-    # D = pd.read_csv(fname, delimiter='\t')
-    # D = D.loc[(D['K_fit']==20) & (D['relevant']==True)
-    #           & (D.common_kappa==True) & (D['sigma2'] == '[0.5, 0.8]')]
-    # compare_model_1_3(D, title='K_true=20, K_fit=20, relevant=True, model1 and model3')
+    ########## Comparing Type 1 and 2 ##########
+    fname = model_dir + f'/Results/2.simulation/eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv'
+    D = pd.read_csv(fname, delimiter='\t')
+    D = D.loc[(D['K_fit']==20) & (D['relevant']==True)
+              & (D.common_kappa==True) & (D['sigma2'] == '[0.5, 0.8]')]
+    compare_model_1_3(D, title='K_true=20, K_fit=20, relevant=True, model1 and model3')
 
-    ########## Comparing model 3 and 4 ##########
-    # fname = model_dir + f'/Results/2.simulation/eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv'
-    # # fname = f'eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv'
-    # D = pd.read_csv(fname, delimiter='\t')
-    # # D = D.loc[(D['K_fit']==20) & (D['relevant']==True)]
-    # compare_model_3_4(D, title='K_true=20, K_fit=20, relevant=False, model3 and model4')
+    ########## Comparing Type 2 and 3 ##########
+    fname = model_dir + f'/Results/2.simulation/eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv'
+    # fname = f'eval_Ktrue_20_Kfit_20_Fusion_merged_joint.tsv'
+    D = pd.read_csv(fname, delimiter='\t')
+    # D = D.loc[(D['K_fit']==20) & (D['relevant']==True)]
+    compare_model_3_4(D, title='K_true=20, K_fit=20, relevant=False, model3 and model4')
 
-    # example_fusion_group(K_true=20, K=20, width=50, nsub_list=np.array([10,10]),
-    #                      M=np.array([40,20],dtype=int), num_part=1, sigma2=[0.3,0.6],
-    #                      low=0.7, high=0.7, relevant=True)
+    example_fusion_group(K_true=20, K=20, width=50, nsub_list=np.array([10,10]),
+                         M=np.array([40,20],dtype=int), num_part=1, sigma2=[0.3,0.6],
+                         low=0.7, high=0.7, relevant=True)
 
-    ########## Comparing model 3vs4 when different fitting/true k ##########
+    ########## Comparing model type 2vs3 when different fitting/true k ##########
     compare_diffK(generate_ck=False, save=True)

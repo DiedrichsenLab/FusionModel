@@ -14,27 +14,22 @@ import Functional_Fusion.atlas_map as am
 from Functional_Fusion.dataset import *
 import Functional_Fusion.matrix as matrix
 import nibabel as nb
-import generativeMRF.full_model as fm
-import generativeMRF.spatial as sp
-import generativeMRF.arrangements as ar
-import generativeMRF.emissions as em
-import generativeMRF.evaluation as ev
+import HierarchBayesParcel.full_model as fm
+import HierarchBayesParcel.spatial as sp
+import HierarchBayesParcel.arrangements as ar
+import HierarchBayesParcel.emissions as em
+import HierarchBayesParcel.evaluation as ev
 import torch as pt
 import matplotlib.pyplot as plt
 import pickle
 from copy import deepcopy
 import time
+import FusionModel.util as ut
 
 
-def build_data_list(datasets,
-                    atlas='MNISymC3',
-                    sess=None,
-                    cond_ind=None,
-                    type=None,
-                    part_ind=None,
-                    subj=None,
-                    join_sess=True,
-                    join_sess_part=False, smooth=None):
+def build_data_list(datasets, atlas='MNISymC3', sess=None, cond_ind=None,
+                    type=None, part_ind=None, subj=None, join_sess=True,
+                    join_sess_part=False, smooth=None, hemis=None):
     """Builds list of datasets, cond_vec, part_vec, subj_ind
     from different data sets
     Args:
@@ -44,18 +39,15 @@ def build_data_list(datasets,
         design_ind (list, optional): _description_. Defaults to None.
         part_ind (list, optional): _description_. Defaults to None.
         subj (list, optional): _description_. Defaults to None.
-        join_sess (bool, optional): Model the sessions with a single model . Defaults to True.
+        join_sess (bool, optional): Model the sessions with a single model.
+            Defaults to True.
     Returns:
-        data,
-        cond_vec,
-        part_vec,
-        subj_ind
+        data, cond_vec, part_vec, subj_ind
     """
     n_sets = len(datasets)
-    data = []
-    cond_vec = []
-    part_vec = []
-    subj_ind = []
+    hemis_dict = {'L': 'cortex_left', 'R': 'cortex_right'}
+    this_at, _ = am.get_atlas(atlas, ut.atlas_dir)
+    data, cond_vec, part_vec, subj_ind = [],[],[],[]
 
     # Set defaults for data sets:
     if sess is None:
@@ -71,9 +63,11 @@ def build_data_list(datasets,
     # Run over datasets get data + design
     for i in range(n_sets):
         dat, info, ds = get_dataset(ut.base_dir, datasets[i],
-                                    atlas=atlas,
-                                    sess=sess[i],
+                                    atlas=atlas, sess=sess[i],
                                     type=type[i], smooth=smooth)
+        if hemis is not None:
+            stru_idx = this_at.structure.index(hemis_dict[hemis])
+            dat = dat[:,:,this_at.indx_full[stru_idx]]
         # Sub-index the subjects:
         if subj is not None:
             dat = dat[subj[i], :, :]
@@ -111,10 +105,9 @@ def build_data_list(datasets,
     return data, cond_vec, part_vec, subj_ind
 
 
-def build_model(K, arrange, sym_type, emission, atlas,
-                cond_vec, part_vec,
-                uniform_kappa=True,
-                weighting=None):
+def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
+                uniform_kappa=True, weighting=None, epos_iter=5, eneg_iter=5,
+                num_chain=20, Wc=None, theta=None):
     """ Builds a Full model based on your specification"""
     if arrange == 'independent':
         if sym_type == 'sym':
@@ -124,10 +117,27 @@ def build_model(K, arrange, sym_type, emission, atlas,
                                                       same_parcels=False,
                                                       spatial_specific=True,
                                                       remove_redundancy=False)
+            ar_model.name = 'indp_sym'
         elif sym_type == 'asym':
             ar_model = ar.ArrangeIndependent(K, atlas.P,
                                              spatial_specific=True,
                                              remove_redundancy=False)
+            ar_model.name = 'indp_asym'
+    elif arrange == 'cRBM_W':
+        # Boltzmann with a arbitrary fully connected model - P hiden nodes
+        n_hidden = atlas.P
+        ar_model = ar.cmpRBM(K, atlas.P, nh=n_hidden, eneg_iter=eneg_iter,
+                             epos_iter=epos_iter, eneg_numchains=num_chain)
+        ar_model.name=f'cRBM_{n_hidden}'
+    elif arrange == 'cRBM_Wc':
+        # Covolutional Boltzman machine with the true neighbourhood matrix
+        # theta_w in this case is not fit.
+        if Wc is None:
+            raise ValueError('Wc must be provided')
+
+        ar_model = ar.wcmDBM(K, atlas.P, Wc=Wc, theta=theta, eneg_iter=eneg_iter,
+                             epos_iter=epos_iter, eneg_numchains=num_chain)
+        ar_model.name = 'cRBM_Wc'
     else:
         raise (NameError(f'unknown arrangement model:{arrange}'))
 
@@ -163,7 +173,7 @@ def batch_fit(datasets, sess,
               type=None, cond_ind=None, part_ind=None, subj=None,
               atlas=None,
               K=10,
-              arrange='independent',
+              arrange='cRBM_Wc',
               sym_type='asym',
               emission='VMF',
               n_rep=3, n_inits=10, n_iter=80, first_iter=10,
@@ -172,7 +182,9 @@ def batch_fit(datasets, sess,
               join_sess=True,
               join_sess_part=False,
               weighting=None,
-              smooth=None):
+              smooth=None,
+              hemis=None,
+              second_converge=True):
     """ Executes a set of fits starting from random starting values
     selects the best one from a batch and saves them
 
@@ -207,17 +219,39 @@ def batch_fit(datasets, sess,
                                                          subj=subj,
                                                          join_sess=join_sess,
                                                          join_sess_part=join_sess_part,
-                                                         smooth=smooth)
+                                                         smooth=smooth,
+                                                         hemis=hemis)
     toc = time.perf_counter()
     print(f'Done loading. Used {toc - tic:0.4f} seconds!')
 
     # Load all necessary data and designs
     n_sets = len(data)
+    n_subj = sum(len(sublist) for sublist in subj_ind)
+    if hemis == 'L':
+        atlas, _ = am.get_atlas('fs32k_L', ut.atlas_dir)
+    elif hemis == 'R':
+        atlas, _ = am.get_atlas('fs32k_R', ut.atlas_dir)
 
     print(f'Building fullMultiModel {arrange} + {emission} for fitting...')
-    M = build_model(K, arrange, sym_type, emission, atlas,
-                    cond_vec, part_vec,
-                    uniform_kappa, weighting)
+    # Load connectiviy matrix if cpRBM with connectiviy is used
+    if arrange == 'cRBM_Wc':
+        surf = 'Y:/data/FunctionalFusion/Atlases/tpl-fs32k/tpl_fs32k_hemi-L_sphere.surf.gii'
+        Wc = ut.get_fs32k_neighbours(surf, remove_mw=True)
+        # Wc = ut.get_fs32k_weights(file_type='distGOD_sp',
+        #                           hemis='half' if (hemis=='L') or (hemis=='R') else 'full',
+        #                           remove_mw=True, max_dist=10, kernel='gaussian', sigma=10,
+        #                           device='cuda' if pt.cuda.is_available() else 'cpu')
+
+        # Use sparse tensor if CUDA is enabled, otherwise dense tensor
+        # Wc = Wc.to_sparse_csr() if pt.cuda.is_available() else Wc.to_dense()
+        # Wc.values().fill_(1)
+    else:
+        Wc = None
+    M = build_model(K, arrange, sym_type, emission, atlas, cond_vec,
+                    part_vec, uniform_kappa, weighting, Wc=Wc, num_chain=n_subj)
+
+    del Wc
+    pt.cuda.empty_cache()
     fm.report_cuda_memory()
 
     # Initialize data frame for results
@@ -237,7 +271,8 @@ def batch_fit(datasets, sess,
 
     # Iterate over the number of fits
     ll = np.empty((n_fits, n_iter))
-    prior = pt.zeros((n_fits, K, atlas.P))
+    tt = np.empty((n_fits, n_iter))
+    prior = pt.zeros((n_fits, K, atlas.P)) if second_converge else None
     for i in range(n_fits):
         print(f'Start fit: repetition {i} - {name}')
 
@@ -246,60 +281,81 @@ def batch_fit(datasets, sess,
         m = deepcopy(M)
         # Attach the data
         m.initialize(data, subj_ind=subj_ind)
+        pt.cuda.empty_cache()
         fm.report_cuda_memory()
 
-        m, ll, theta, U_hat, ll_init = m.fit_em_ninits(
-            iter=n_iter,
-            tol=0.01,
-            fit_arrangement=True,
-            fit_emission=True,
-            init_arrangement=True,
-            init_emission=True,
-            n_inits=n_inits,
-            first_iter=first_iter, verbose=False)
+        # Swith the learning process between independent and RBMs
+        if m.arrange.name.startswith('indp'):
+            m, ll, _, _, _ = m.fit_em_ninits(
+                iter=n_iter,
+                tol=0.01,
+                fit_arrangement=True,
+                fit_emission=True,
+                init_arrangement=True,
+                init_emission=True,
+                n_inits=n_inits,
+                first_iter=first_iter, verbose=False)
+        elif m.arrange.name.startswith('cRBM'):
+            m.random_params(init_arrangement=True,
+                            init_emission=True)
+            m, ll, theta, _ = m.fit_sml(
+                iter=n_iter,
+                batch_size=8,
+                stepsize=0.1,
+                seperate_ll=False,
+                fit_arrangement=True,
+                fit_emission=True)
+            tt[i] = theta.cpu().numpy()
+
         info.loglik.at[i] = ll[-1].cpu().numpy()  # Convert to numpy
         m.clear()
+        if second_converge:
+            # Align group priors
+            if i == 0:
+                indx = pt.arange(K)
+            else:
+                indx = ev.matching_greedy(prior[0, :, :], m.marginal_prob())
+            prior[i, :, :] = m.marginal_prob()[indx, :]
 
-        # Align group priors
-        if i == 0:
-            indx = pt.arange(K)
-        else:
-            indx = ev.matching_greedy(prior[0, :, :], m.marginal_prob())
-        prior[i, :, :] = m.marginal_prob()[indx, :]
+            this_similarity = []
+            for j in range(i):
+                # Option1: K*K similarity matrix between two Us
+                # this_crit = cal_corr(prior[i, :, :], prior[j, :, :])
+                # this_similarity.append(1 - pt.diagonal(this_crit).mean())
 
-        this_similarity = []
-        for j in range(i):
-            # Option1: K*K similarity matrix between two Us
-            # this_crit = cal_corr(prior[i, :, :], prior[j, :, :])
-            # this_similarity.append(1 - pt.diagonal(this_crit).mean())
+                # Option2: L1 norm between two Us
+                this_crit = pt.abs(prior[i, :, :] - prior[j, :, :]).mean()
+                this_similarity.append(this_crit)
 
-            # Option2: L1 norm between two Us
-            this_crit = pt.abs(prior[i, :, :] - prior[j, :, :]).mean()
-            this_similarity.append(this_crit)
+            num_rep = sum(sim < 0.02 for sim in this_similarity)
+            print(num_rep)
 
-        num_rep = sum(sim < 0.02 for sim in this_similarity)
-        print(num_rep)
+            # Convergence: 1. must run enough repetitions (50);
+            #              2. num_rep greater than threshold (10% of max_iter)
+            if (i > 50) and (num_rep >= int(n_fits * 0.1)):
+                m.move_to(device='cpu')
+                models.append(m)
+                break
 
         # Move to CPU device before storing
         m.move_to(device='cpu')
         models.append(m)
+        pt.cuda.empty_cache()
 
-        # Convergence: 1. must run enough repetitions (50);
-        #              2. num_rep greater than threshold (10% of max_iter)
-        if (i > 50) and (num_rep >= int(n_fits * 0.1)):
-            break
         iter_toc = time.perf_counter()
         print(
             f'Done fit: repetition {i} - {name} - {iter_toc - iter_tic:0.4f} seconds!')
 
     models = np.array(models, dtype=object)
+    plt.plot(tt.T)
+    plt.show()
 
     return info, models
 
 
 def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
-            sym_type=['asym', 'sym'], subj_list=None, weighting=None,
-            this_sess=None, space=None, smooth=None):
+            sym_type=['asym', 'sym'], arrange='independent', subj_list=None,
+            weighting=None, this_sess=None, space=None, smooth=None, sc=True):
     # Get dataset info
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     datasets = T.name.to_numpy()
@@ -315,6 +371,12 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
     # Make the atlas object
     if space is None:
         space = 'MNISymC3'
+
+    hemis = None
+    this_space = space
+    if space.startswith('fs32k_'):
+        hemis = space.split('_')[1]
+        space = space.split('_')[0]
 
     atlas, _ = am.get_atlas(space, ut.atlas_dir)
 
@@ -361,6 +423,7 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  subj=subj_list,
                                  atlas=atlas,
                                  K=K,
+                                 arrange=arrange,
                                  sym_type=mname,
                                  name=name,
                                  n_inits=50,
@@ -371,18 +434,20 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
                                  join_sess_part=join_sess_part,
                                  uniform_kappa=uniform_kappa,
                                  weighting=weighting,
-                                 smooth=smooth)
+                                 smooth=smooth,
+                                 hemis=hemis,
+                                 second_converge=sc)
 
         # Save the fits and information
         wdir = ut.model_dir + f'/Models/Models_{model_type}'
-        fname = f'/{name}_space-{atlas.name}_K-{K}'
+        fname = f'/{name}_space-{this_space}_K-{K}'
 
         if this_sess is not None:
             return wdir, fname, info, models
 
         if subj_list is not None:
             wdir = ut.model_dir + f'/Models/Models_{model_type}/leaveNout'
-            fname = f'/{name}_space-{atlas.name}_K-{K}'
+            fname = f'/{name}_space-{this_space}_K-{K}'
 
             toc = time.perf_counter()
             print(f'Done Model fitting - {mname}. Used {toc - tic:0.4f} seconds!')
@@ -562,14 +627,9 @@ def refit_model(model, new_info):
 
 
 if __name__ == "__main__":
-    K = 34
-    sym_type = ['asym']
-    model_type = '03'
-    space = 'MNISymC3'
     datasets_list = [1, 7]
-
     for k in [10, 20, 34, 40, 68, 100]:
-        fit_all(set_ind=datasets_list, K=k, repeats=100, model_type=model_type,
+        fit_all(set_ind=datasets_list, K=k, repeats=100, model_type='03',
                 sym_type=['asym'], space='MNISymC3')
 
     pass
