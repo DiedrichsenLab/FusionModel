@@ -47,6 +47,7 @@ atlas_dir = ut.base_dir + f'/Atlases'
 res_dir = ut.model_dir + f'/Results' + '/5.all_datasets_fusion'
 
 
+
 def get_cmap(mname, load_best=True, sym=False):
     # Get model and atlas.
     fileparts = mname.split('/')
@@ -88,7 +89,9 @@ def get_parcels(model_names):
         except:
             try:
                 atlas, _ = am.get_atlas(
+
                     'MNISymC3', atlas_dir=ut.base_dir + '/Atlases')
+
                 # load existing parcellation
                 par = nb.load(atlas_dir + model_name)
                 Pgroup = pt.tensor(atlas.read_data(par, 0) + 1,
@@ -266,7 +269,9 @@ if __name__ == "__main__":
     ############# Similarity between datasets #############
     datasets = ['MDTB', 'Pontine', 'Nishimoto',
                 'IBC', 'WMFS', 'Demand', 'Somatotopic', 'HCP']
+
     rel = ut.similarity_between_datasets(ut.base_dir, datasets, atlas='MNISymC3',
+
                                       subtract_mean=True, voxel_wise=True)
 
     corr = np.ma.corrcoef(np.ma.masked_array(rel, np.isnan(rel)))
