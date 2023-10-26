@@ -242,7 +242,7 @@ def batch_fit(datasets, sess,
 
     # Load all necessary data and designs
     n_sets = len(data)
-    n_subj = np.unique(np.stack(subj_ind)).size
+    n_subj = np.unique(np.concatenate(subj_ind, axis=0)).size
     if hemis == 'L':
         atlas, _ = am.get_atlas('fs32k_L', ut.atlas_dir)
     elif hemis == 'R':

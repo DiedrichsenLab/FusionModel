@@ -219,7 +219,7 @@ def run_prederror(model_names, test_data, test_sess, cond_ind,
             minfo, model = load_batch_fit(f"{model_name}")
             minfo = minfo.iloc[0]
 
-        model_kp = model.emissions[0].uniform_kappa
+        model_kp = False
         this_res = pd.DataFrame()
         # Loop over the splits - if split then train a individual model
         for n in range(n_splits):
@@ -279,7 +279,8 @@ def run_prederror(model_names, test_data, test_sess, cond_ind,
                                   'indivtrain_ind': [indivtrain_ind] * num_subj,
                                   'indivtrain_val': [indivtrain_values[n]] * num_subj,
                                   'subj_num': np.arange(num_subj),
-                                  'common_kappa': [model_kp] * num_subj})
+                                  'indiv_train_kappa': [model_kp] * num_subj,
+                                  'indiv_test_kappa': [model_kp] * num_subj})
             # Add all the evaluations to the data frame
             for e, ev in enumerate(all_eval):
                 if isinstance(ev, str):
@@ -539,10 +540,10 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
     else:
         return results
 
-def run_dcbc_IBC(model_names, test_data, test_sess,
-                 cond_ind=None, part_ind=None,
-                 indivtrain_ind=None, indivtrain_values=[0],
-                 device=None, load_best=True):
+def run_dcbc_individual(model_names, test_data, test_sess,
+                        cond_ind=None, part_ind=None,
+                        indivtrain_ind=None, indivtrain_values=[0],
+                        device=None, load_best=True):
     """ Calculates DCBC using a test_data set
     and test_sess.
     if indivtrain_ind is given, it splits the test_data set
@@ -608,6 +609,7 @@ def run_dcbc_IBC(model_names, test_data, test_sess,
 
         Prop = model.marginal_prob()
 
+        model_kp = True
         this_res = pd.DataFrame()
         # Loop over the splits - if split then train a individual model
         for n in range(n_splits):
@@ -622,7 +624,7 @@ def run_dcbc_IBC(model_names, test_data, test_sess,
                                           X=matrix.indicator(
                                               cond_vec[train_indx]),
                                           part_vec=part_vec[train_indx],
-                                          uniform_kappa=model.emissions[0].uniform_kappa)
+                                          uniform_kappa=model_kp)
                 indivtrain_em.initialize(tdata[:, train_indx, :])
                 model.emissions = [indivtrain_em]
                 model.initialize()
@@ -664,17 +666,20 @@ def run_dcbc_IBC(model_names, test_data, test_sess,
             # ------------------------------------------
             # Collect the information from the evaluation
             # in a data frame
+            train_datasets = minfo.datasets
+            if isinstance(minfo.datasets, pd.Series):
+                train_datasets = minfo.datasets.tolist()
             ev_df = pd.DataFrame({'model_name': [minfo['name']] * num_subj,
                                   'atlas': [minfo.atlas] * num_subj,
                                   'K': [minfo.K] * num_subj,
-                                  'emission': [minfo.emission] * num_subj,
-                                  'train_data': [minfo.datasets] * num_subj,
+                                  'train_data': [train_datasets] * num_subj,
                                   'train_loglik': [minfo.loglik] * num_subj,
                                   'test_data': [test_data] * num_subj,
                                   'indivtrain_ind': [indivtrain_ind] * num_subj,
                                   'indivtrain_val': [indivtrain_values[n]] * num_subj,
                                   'subj_num': np.arange(num_subj),
-                                  'common_kappa': [model.emissions[0].uniform_kappa] * num_subj})
+                                  'indiv_train_kappa': [model_kp] * num_subj,
+                                  'indiv_test_kappa': [model_kp] * num_subj})
             # Add all the evaluations to the data frame
             ev_df['dcbc_group'] = dcbc_group.cpu()
             ev_df['dcbc_indiv'] = dcbc_indiv.cpu()

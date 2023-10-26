@@ -95,13 +95,13 @@ def result_5_eval(K=10, symmetric='asym', model_type=None, model_name=None,
                                        part_ind='half', indivtrain_ind='half',
                                        indivtrain_values=[1,2], device='cuda')
         # 2. Run coserr individual
-        res_coserr = run_prederror(m_name, ds, 'all', cond_ind=None,
-                                   part_ind='half', eval_types=['group', 'floor'],
-                                   indivtrain_ind='half', indivtrain_values=[1,2],
-                                   device='cuda')
+        # res_coserr = run_prederror(m_name, ds, 'all', cond_ind=None,
+        #                            part_ind='half', eval_types=['group', 'floor'],
+        #                            indivtrain_ind='half', indivtrain_values=[1,2],
+        #                            device='cuda')
         # 3. Merge the two dataframe
-        res = pd.merge(res_dcbc, res_coserr, how='outer')
-        results = pd.concat([results, res], ignore_index=True)
+        # res = pd.merge(res_dcbc, res_coserr, how='outer')
+        results = pd.concat([results, res_dcbc], ignore_index=True)
 
     if return_df:
         return results
@@ -317,23 +317,22 @@ def plot_gmm_vs_vmf(fname, benchmark=None, save=False):
 
 if __name__ == "__main__":
     ############# Evaluating indiv datasets vs fusion #############
-    # T = pd.read_csv(base_dir + '/dataset_description.tsv', sep='\t')
-    # D = pd.DataFrame()
-    # # datasets_list = [[0], [1], [2], [3], [4], [5], [6], [0, 1, 2, 3, 4, 5, 6]]
-    # for i in range(7):
-    #     datasets = [0, 1, 2, 3, 4, 5, 6]
-    #     datasets.remove(i)
-    #     for k in [100]:
-    #         datanames = T.two_letter_code[datasets].to_list()
-    #         datanames += [''.join(T.two_letter_code[datasets]),
-    #                       ''.join(T.two_letter_code[[0, 1, 2, 3, 4, 5, 6]])]
-    #         res = result_5_eval(K=k, symmetric='asym', model_type=['03','04'],
-    #                             model_name=datanames, t_datasets=[T.name[i]],
-    #                             return_df=True)
-    #         D = pd.concat([D, res], ignore_index=True)
-    # wdir = model_dir + f'/Models/Evaluation/asym'
-    # fname = f'/eval_dataset7_asym_K-100.tsv'
-    # D.to_csv(wdir + fname, index=False, sep='\t')
+    T = pd.read_csv(base_dir + '/dataset_description.tsv', sep='\t')
+    D = pd.DataFrame()
+    # datasets_list = [[0], [1], [2], [3], [4], [5], [6], [0, 1, 2, 3, 4, 5, 6]]
+    for i in range(1):
+        datasets = [0, 1, 2, 3, 4, 5, 6]
+        datasets.remove(i)
+        for k in [10,17,20,34,40,68,100]:
+            datanames = T.two_letter_code[datasets].to_list()
+            datanames += [''.join(T.two_letter_code[datasets])]
+            res = result_5_eval(K=k, symmetric='asym', model_type=['03','04'],
+                                model_name=datanames, t_datasets=[T.name[i]],
+                                return_df=True)
+            D = pd.concat([D, res], ignore_index=True)
+    wdir = model_dir + f'/Models/Evaluation/asym'
+    fname = f'/eval_dataset7_asym_dcbc_true.tsv'
+    D.to_csv(wdir + fname, index=False, sep='\t')
 
     ############# Plot results #############
     # fname = f'/Models/Evaluation/eval_dataset7_asym.tsv'
