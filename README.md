@@ -2,7 +2,7 @@ FusionModel
 ====
 Diedrichsen Lab, Western University
 
-This repository hosts the scripts to replicate the results claimed in the 
+This repository hosts the scripts to replicate the results reported in the 
 [paper](https://www.biorxiv.org/content/10.1101/2023.05.24.542121v1). It uses the functions from 
 two repositories, [HierarchBayesParcel](https://github.com/DiedrichsenLab/HierarchBayesParcel)
 and [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion). The former is the 

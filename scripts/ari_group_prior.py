@@ -27,15 +27,15 @@ import seaborn as sb
 import sys
 import time
 import pickle
-from copy import copy,deepcopy
+from copy import copy, deepcopy
 from itertools import combinations
 import FusionModel.util as ut
-from FusionModel.evaluate import *
 import FusionModel.similarity_colormap as sc
-import FusionModel.hierarchical_clustering as cl
+import ProbabilisticParcellation.hierarchical_clustering as cl
 from FusionModel.learn_fusion_gpu import *
 from sklearn.manifold import MDS
 import sklearn
+import seaborn as sns
 
 # pytorch cuda global flag
 # pt.cuda.is_available = lambda : False
@@ -43,34 +43,19 @@ pt.set_default_tensor_type(pt.cuda.FloatTensor
                            if pt.cuda.is_available() else
                            pt.FloatTensor)
 
-# Find model directory to save model fitting results
-model_dir = 'Y:/data/Cerebellum/ProbabilisticParcellationModel'
-if not Path(model_dir).exists():
-    model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
-if not Path(model_dir).exists():
-    model_dir = '/Volumes/diedrichsen_data$/data/Cerebellum/ProbabilisticParcellationModel'
-if not Path(model_dir).exists():
-    raise (NameError('Could not find model_dir'))
+atlas_dir = ut.base_dir + f'/Atlases'
+res_dir = ut.model_dir + f'/Results' + '/5.all_datasets_fusion'
 
-base_dir = '/Volumes/diedrichsen_data$/data/FunctionalFusion'
-if not Path(base_dir).exists():
-    base_dir = '/srv/diedrichsen/data/FunctionalFusion'
-if not Path(base_dir).exists():
-    base_dir = 'Y:/data/FunctionalFusion'
-if not Path(base_dir).exists():
-    raise(NameError('Could not find base_dir'))
 
-atlas_dir = base_dir + f'/Atlases'
-res_dir = model_dir + f'/Results' + '/5.all_datasets_fusion'
 
 def get_cmap(mname, load_best=True, sym=False):
     # Get model and atlas.
     fileparts = mname.split('/')
     split_mn = fileparts[-1].split('_')
     if load_best:
-        info, model = load_batch_best(mname)
+        info, model = ut.load_batch_best(mname)
     else:
-        info, model = load_batch_fit(mname)
+        info, model = ut.load_batch_fit(mname)
     atlas, ainf = am.get_atlas(info.atlas, atlas_dir)
 
     # Get winner-take all parcels
@@ -83,9 +68,11 @@ def get_cmap(mname, load_best=True, sym=False):
 
     # Define color anchors
     m, regions, colors = sc.get_target_points(atlas, parcel)
-    cmap = sc.colormap_mds(W, target=(m, regions, colors), clusters=None, gamma=0.3)
+    cmap = sc.colormap_mds(W, target=(m, regions, colors),
+                           clusters=None, gamma=0.3)
 
     return cmap.colors
+
 
 def get_parcels(model_names):
     if not isinstance(model_names, list):
@@ -95,22 +82,28 @@ def get_parcels(model_names):
     for i, model_name in enumerate(model_names):
         try:
             # Load best model
-            _, model = load_batch_best(f"{model_name}", device='cuda')
+            _, model = ut.load_batch_best(
+                f"{model_name}", device=ut.default_device)
             Prop = model.marginal_prob()
             Pgroup = pt.argmax(Prop, dim=0) + 1
         except:
             try:
-                atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
+                atlas, _ = am.get_atlas(
+
+                    'MNISymC3', atlas_dir=ut.base_dir + '/Atlases')
+
                 # load existing parcellation
                 par = nb.load(atlas_dir + model_name)
                 Pgroup = pt.tensor(atlas.read_data(par, 0) + 1,
                                    dtype=pt.get_default_dtype())
             except NameError:
-                print('The input model is neither fitted model or existing parcellations!')
+                print(
+                    'The input model is neither fitted model or existing parcellations!')
         finally:
             parcels.append(Pgroup)
 
     return parcels
+
 
 def run_ari(parcels, titles=[], colors=[], mds=False, ret=False):
     num_parcels = len(parcels)
@@ -118,7 +111,7 @@ def run_ari(parcels, titles=[], colors=[], mds=False, ret=False):
     corr = np.zeros((num_parcels, num_parcels))
     for i in range(num_parcels):
         for j in range(num_parcels):
-            corr[i,j] = ev.ARI(parcels[i], parcels[j])
+            corr[i, j] = ev.ARI(parcels[i], parcels[j])
             # corr[i,j] = sklearn.metrics.adjusted_rand_score(parcels[i].cpu(), parcels[j].cpu())
     if ret:
         return corr
@@ -139,7 +132,7 @@ def run_ari(parcels, titles=[], colors=[], mds=False, ret=False):
             # Plot the resulting points
             plt.scatter(pos[:, 0], pos[:, 1], c=colors)
             for j in range(pos.shape[0]):
-                plt.text(pos[j, 0]+0.005, pos[j, 1], titles[j],
+                plt.text(pos[j, 0] + 0.005, pos[j, 1], titles[j],
                          fontdict=dict(color=colors[j], alpha=0.5))
 
         else:
@@ -152,9 +145,12 @@ def run_ari(parcels, titles=[], colors=[], mds=False, ret=False):
             plt.yticks(range(len(titles)), titles, rotation=45)
             plt.colorbar()
 
+    return corr
+
+
 def plot_ari(model_type=['03'], K=[10], singleTask=False, singleRest=True, looTask=True,
              looCombined=True, allTask=False, all8=False, existing=False, mds=True,
-             average=False, N=4):
+             average=False, N=4, annot=False):
     T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
 
     num_row = len(model_type)
@@ -179,7 +175,7 @@ def plot_ari(model_type=['03'], K=[10], singleTask=False, singleRest=True, looTa
                     # Task+rest
                     model_name += [f'Models_{mt}/leaveNout/asym_{dataname}Hc_space-MNISymC3_K-'
                                    f'{k}_hcpOdd']
-                    labels += [dataname+'Hc']
+                    labels += [dataname + 'Hc']
                     colors += ['tab:orange']
 
                 if singleTask:
@@ -194,12 +190,14 @@ def plot_ari(model_type=['03'], K=[10], singleTask=False, singleRest=True, looTa
                 colors += ['tab:green']
             if singleRest:
                 # Pure Rest
-                model_name += [f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{k}_hcpOdd']
+                model_name += [
+                    f'Models_{mt}/leaveNout/asym_Hc_space-MNISymC3_K-{k}_hcpOdd']
                 labels += ['HCP']
                 colors += ['tab:blue']
             if all8:
                 # All 8 datasets
-                model_name += [f'Models_{mt}/leaveNout/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-{k}_hcpOdd']
+                model_name += [
+                    f'Models_{mt}/leaveNout/asym_MdPoNiIbWmDeSoHc_space-MNISymC3_K-{k}_hcpOdd']
                 labels += ['7tasks+HCP']
                 colors += ['tab:orange']
             if existing:
@@ -210,21 +208,24 @@ def plot_ari(model_type=['03'], K=[10], singleTask=False, singleRest=True, looTa
                                '/tpl-MNI152NLin2009cSymC/atl-Ji10_space-MNI152NLin2009cSymC_dseg.nii',
                                '/tpl-MNI152NLin2009cSymC/atl-MDTB10_space-MNI152NLin2009cSymC_dseg.nii']
                 labels += ['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10']
-                colors += ['black', 'tab:blue', 'tab:blue', 'tab:blue', 'tab:green']
+                colors += ['black', 'tab:blue',
+                           'tab:blue', 'tab:blue', 'tab:green']
 
             parcels = get_parcels(model_name)
 
             if average:
-                corrs.append(run_ari(parcels, titles=labels, colors=colors, mds=mds, ret=True))
+                corrs.append(run_ari(parcels, titles=labels,
+                             colors=colors, mds=mds, ret=True))
             else:
                 plt.subplot(num_row, num_col, row * num_col + col + 1)
-                run_ari(parcels, titles=labels, colors=colors, mds=mds)
+                corr = run_ari(parcels, titles=labels, colors=colors, mds=mds)
+                corrs.append(corr)
                 plt.title(f'Model {mt}, K={k}')
 
+    mean_corr = np.stack(corrs[0:N]).mean(axis=0)
     if average:
         plt.clf()
-        plt.figure(figsize=(8,8))
-        mean_corr = np.stack(corrs[0:N]).mean(axis=0)
+        plt.figure(figsize=(8, 8))
 
         if mds:
             # Calculate the eigenvalues and eigenvectors of the correlation coefficient matrix
@@ -242,7 +243,9 @@ def plot_ari(model_type=['03'], K=[10], singleTask=False, singleRest=True, looTa
         else:
             # Plot the correlation matrix
             np.fill_diagonal(mean_corr, 0)
-            plt.imshow(mean_corr, vmin=mean_corr.min(), vmax=mean_corr.max())
+            # plt.imshow(mean_corr, vmin=mean_corr.min(), vmax=mean_corr.max())
+            sns.heatmap(mean_corr, annot=annot,
+                        vmin=mean_corr.min(), vmax=mean_corr.max())
 
             # Add x and y axis labels
             plt.xticks(range(len(labels)), labels, rotation=45)
@@ -254,16 +257,21 @@ def plot_ari(model_type=['03'], K=[10], singleTask=False, singleRest=True, looTa
         plt.tight_layout()
 
     plt.show()
+    return corrs, mean_corr, labels
+
 
 if __name__ == "__main__":
     ############# Visualize ARI-MDS plot #############
-    plot_ari(model_type=['03'], K=[10,17,20,34,40,68,100], singleTask=True, singleRest=True,
+    plot_ari(model_type=['03'], K=[10, 17, 20, 34, 40, 68, 100], singleTask=True, singleRest=True,
              looTask=False, looCombined=False, allTask=True, all8=True, existing=True, mds=False,
              average=True, N=7)
 
     ############# Similarity between datasets #############
-    datasets = ['MDTB','Pontine','Nishimoto','IBC','WMFS','Demand','Somatotopic','HCP']
-    rel = similarity_between_datasets(base_dir, datasets, atlas='MNISymC3',
+    datasets = ['MDTB', 'Pontine', 'Nishimoto',
+                'IBC', 'WMFS', 'Demand', 'Somatotopic', 'HCP']
+
+    rel = ut.similarity_between_datasets(ut.base_dir, datasets, atlas='MNISymC3',
+
                                       subtract_mean=True, voxel_wise=True)
 
     corr = np.ma.corrcoef(np.ma.masked_array(rel, np.isnan(rel)))
@@ -271,7 +279,7 @@ if __name__ == "__main__":
     plt.colorbar()
     plt.show()
 
-    plt.figure(figsize=(24,12))
-    plot_multi_flat(rel, 'MNISymC3', grid=(2, 4), dtype='func',
+    plt.figure(figsize=(24, 12))
+    ut.plot_multi_flat(rel, 'MNISymC3', grid=(2, 4), dtype='func',
                     cscale=None, colorbar=False, titles=datasets)
     plt.show()

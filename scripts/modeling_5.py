@@ -133,12 +133,12 @@ def result_5_benchmark(fname, benchmark='MDTB', save=False):
     D = D.loc[(D['train_data']!="['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' "
                                 "'Somatotopic']")]
     D = D.replace("['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']", 'all')
-    df = D.loc[(D['test_data'] == benchmark)]
 
     nums = [('Pontine',24), ('Nishimoto',32), ('WMFS',38), ('Demand',54), ('Somatotopic', 91)]
     for (td, i) in nums:
         D.loc[D.test_data == td, 'subj_num'] += i
 
+    df = D.loc[(D['test_data'] == benchmark)]
     crits = ['dcbc_group','dcbc_indiv']
     plt.figure(figsize=(10, 5))
     for i, c in enumerate(crits):
@@ -146,7 +146,7 @@ def result_5_benchmark(fname, benchmark='MDTB', save=False):
         sb.barplot(data=df, x='train_data', y=c, order=["['Pontine']", "['Nishimoto']",
                                                         "['IBC']", "['WMFS']", "['Demand']",
                                                         "['Somatotopic']", 'all'],
-                   hue='common_kappa', hue_order=[True, False], errorbar="se",
+                   hue='model_type', hue_order=['Models_03', 'Models_04'], errorbar="se",
                    palette=sb.color_palette()[1:3], width=0.7)
         plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, fontsize='small')
         # plt.xticks(rotation=45)
@@ -190,13 +190,22 @@ def plot_diffK_benchmark(fname, benchmark='MDTB', save=False):
                                 "'Somatotopic']")]
     D = D.replace("['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']", 'all')
     df = D.loc[(D['test_data'] == benchmark)]
+    df1 = df.loc[df['indiv_train_kappa'] == True]
+    df2 = df.loc[df['indiv_train_kappa'] == False]
 
-    plt.figure(figsize=(8, 5))
-    crits = ['dcbc_group', 'dcbc_indiv']
+    plt.figure(figsize=(10, 10))
+    crits = ['dcbc_indiv','dcbc_indiv','coserr_ind3','coserr_ind3']
     for i, c in enumerate(crits):
-        plt.subplot(1, 2, i + 1)
-        sb.lineplot(data=df, x='K', y=c,
-                    hue='common_kappa', hue_order=[True, False],
+        plt.subplot(2, 2, i + 1)
+        if i == 0 or i == 2:
+            this_df = df1
+            plt.title('indiv_train_kappa=True')
+        else:
+            this_df = df2
+            plt.title('indiv_train_kappa=False')
+
+        sb.lineplot(data=this_df, x='K', y=c,
+                    hue='model_type', hue_order=['Models_03', 'Models_04'],
                     style="train_data",
                     style_order=["all", "['Pontine']", "['Nishimoto']", "['IBC']",
                                  "['WMFS']", "['Demand']", "['Somatotopic']"],
@@ -217,6 +226,53 @@ def plot_diffK_benchmark(fname, benchmark='MDTB', save=False):
 
     if save:
         plt.savefig('all_datasets_fusion_diffK.pdf', format='pdf')
+    plt.show()
+
+def result_5_benchmark_ext(fname, K=17, benchmark='MDTB', save=False):
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+
+    D = D.loc[D.K == K]
+    D = D.loc[(D['train_data']!="['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' "
+                                "'Somatotopic']")]
+    D = D.replace("['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']", 'all')
+
+    nums = [('Pontine',24), ('Nishimoto',32), ('WMFS',38), ('Demand',54), ('Somatotopic', 91)]
+    for (td, i) in nums:
+        D.loc[D.test_data == td, 'subj_num'] += i
+
+    df = D.loc[(D['test_data'] == benchmark)]
+    df1 = df.loc[df['indiv_train_kappa'] == True]
+    df2 = df.loc[df['indiv_train_kappa'] == False]
+
+    crits = ['dcbc_indiv','dcbc_indiv','coserr_ind3','coserr_ind3']
+    plt.figure(figsize=(10, 10))
+    for i, c in enumerate(crits):
+        plt.subplot(2, 2, i + 1)
+        if i == 0 or i == 2:
+            this_df = df1
+            plt.title('indiv_train_kappa=True')
+        else:
+            this_df = df2
+            plt.title('indiv_train_kappa=False')
+
+        sb.barplot(data=this_df, x='train_data', y=c, order=["['Pontine']", "['Nishimoto']",
+                                                        "['IBC']", "['WMFS']", "['Demand']",
+                                                        "['Somatotopic']", 'all'],
+                   hue='model_type', hue_order=['Models_03', 'Models_04'], errorbar="se",
+                   palette=sb.color_palette()[1:3], width=0.7)
+        # plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, fontsize='small')
+        plt.legend(loc='upper right', fontsize='small')
+        plt.xticks(rotation=45)
+        if c == 'dcbc_indiv':
+            plt.ylim(0.12, 0.22)
+        elif c == 'coserr_ind3':
+            plt.ylim(0.6, 0.72)
+
+    plt.suptitle(f'All datasets fusion, benchmark_dataset={benchmark}, K={K}')
+    plt.tight_layout()
+
+    if save:
+        plt.savefig(f'all_datasets_fusion.pdf', format='pdf')
     plt.show()
 
 def make_all_in_one_tsv(path, out_name):
@@ -335,10 +391,12 @@ if __name__ == "__main__":
     D.to_csv(wdir + fname, index=False, sep='\t')
 
     ############# Plot results #############
-    # fname = f'/Models/Evaluation/eval_dataset7_asym.tsv'
-    # # result_5_plot(fname, model_type='Models_03')
+    fname = f'/Models/Evaluation/asym/eval_dataset7_asym.tsv'
+    # result_5_plot(fname, model_type='Models_03')
     # result_5_benchmark(fname, benchmark='MDTB', save=False)
-    # plot_diffK_benchmark(fname, save=True)
+    # plot_diffK_benchmark(fname, save=False)
+    # result_5_benchmark_ext(fname, benchmark='MDTB', save=False)
+    plot_diffK_benchmark(fname, save=False)
 
     ############# Plot fusion atlas #############
     indiv_dataset = ['Po', 'Ni', 'Ib', 'Wm', 'De', 'So']

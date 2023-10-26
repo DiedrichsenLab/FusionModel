@@ -208,8 +208,7 @@ def plot_smooth_vs_unsmooth(D, test_s=0):
     crits = ['dcbc_group', 'dcbc_indiv', 'dcbc_indiv_em']
     for i, c in enumerate(crits):
         plt.subplot(3, 2, i*2 + 1)
-        sb.barplot(data=D, x='model_type', y=c, hue='train_smooth', errorbar="se")
-
+        sb.lineplot(data=D, x='train_smooth', y=c, errorbar="se",err_style="bars")
         # if 'coserr' in c:
         #     plt.ylim(0.4, 1)
         plt.subplot(3, 2, i*2 + 2)
@@ -244,6 +243,21 @@ def compare_diff_smooth(D, mt='03', outname='MDTB_cortex', save=False):
     if save:
         plt.savefig('diff_Ktrue20_Kfit5to40.pdf', format='pdf')
     plt.show()
+
+def F_test(D, mt='03', value='dcbc_group'):
+    res_plot = D.loc[D.model_type==f'Models_{mt}']
+    arvg_dcbc = res_plot.groupby(['train_smooth','subj_num'])['dcbc_group','dcbc_indiv',
+                                                              'dcbc_indiv_em'].mean().reset_index()
+
+    new_DD = res_plot.loc[res_plot.test_sess=='s1']
+    new_DD[['dcbc_group','dcbc_indiv','dcbc_indiv_em']] = arvg_dcbc[['dcbc_group','dcbc_indiv',
+                                                                     'dcbc_indiv_em']]
+
+    # F-test
+    from statsmodels.stats.anova import AnovaRM
+    model = AnovaRM(new_DD, value, 'subj_num', within=['train_smooth'])
+    res = model.fit()
+    print(res)
 
 if __name__ == "__main__":
     ############# Fitting cortical models #############
@@ -285,6 +299,11 @@ if __name__ == "__main__":
                          smooth=[0.1, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0],
                          save=True, plot_wb=True,
                          outname='asym_fs32k-L_K-17_Ib_cRBM_Wc_0.1to5.0_group0_independent')
+
+    ############# Repeated measure ANOVA #############
+    # fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-17_Md_on_Sess_smooth_group0.tsv'
+    # D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # F_test(D, mt='03',value='dcbc_indiv')
 
     ############# Plotting comparison #############
     fname = f'/Models/Evaluation/eval_all_asym_fs32k-L_K-17_Md_on_Sess_cRBM_Wc_0.1-4.0_group0.tsv'

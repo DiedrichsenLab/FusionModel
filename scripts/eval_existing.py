@@ -32,7 +32,6 @@ from itertools import combinations
 from FusionModel.util import *
 from FusionModel.evaluate import *
 import FusionModel.similarity_colormap as sc
-import FusionModel.hierarchical_clustering as cl
 
 # pytorch cuda global flag
 # pt.cuda.is_available = lambda : False
@@ -308,44 +307,44 @@ if __name__ == "__main__":
     # plt.show()
 
     ############# Evaluating models #############
-    test_datasets_list = [7,7]
-    T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
-    num_subj = T.return_nsubj.to_numpy()[test_datasets_list]
-    sub_list = [np.arange(c) for c in num_subj]
-
-    # types = T.default_type.to_numpy()[test_datasets_list]
-    types = ['Tseries', 'Tseries']
-    sub_list = [np.arange(0, 100, 2), np.arange(0, 100, 2)+1]
-
-    # Making half hcp resting subjects data
-    # sub_list = [np.arange(c) for c in num_subj[:-2]]
-    # hcp_train = np.arange(0, num_subj[-1], 2) + 1
-    # hcp_test = np.arange(0, num_subj[-1], 2)
-    # sub_list += [hcp_test, hcp_train]
-
-    # 1. Save as tsv
-    # eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
-    #               t_datasets=T.name.to_numpy()[test_datasets_list],
-    #               type=types, subj=sub_list, out_name='hcpTs')
-
-    # 2. Check within and between curve on HCP raw timeseries
-    corrW, corrB = eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
-                                 t_datasets=T.name.to_numpy()[test_datasets_list],
-                                 type=types, subj=sub_list, out_name='hcpTs',
-                                 save=False, plot_wb=True)
-    corrW = pt.nanmean(pt.stack([pt.stack(s) for s in corrW]), dim=0)
-    corrB = pt.nanmean(pt.stack([pt.stack(s) for s in corrB]), dim=0)
-    corrW = [corrW.unbind(dim=0)]
-    corrB = [corrB.unbind(dim=0)]
-
-    plot_existing_corr_wb(corrW, corrB, par_name=['Anatom', 'Buckner7',
-                                                  'Buckner17', 'Ji10', 'MDTB10'],
-                          datasets=['HCP'])
+    # test_datasets_list = [7,7]
+    # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+    # num_subj = T.return_nsubj.to_numpy()[test_datasets_list]
+    # sub_list = [np.arange(c) for c in num_subj]
+    #
+    # # types = T.default_type.to_numpy()[test_datasets_list]
+    # types = ['Tseries', 'Tseries']
+    # sub_list = [np.arange(0, 100, 2), np.arange(0, 100, 2)+1]
+    #
+    # # Making half hcp resting subjects data
+    # # sub_list = [np.arange(c) for c in num_subj[:-2]]
+    # # hcp_train = np.arange(0, num_subj[-1], 2) + 1
+    # # hcp_test = np.arange(0, num_subj[-1], 2)
+    # # sub_list += [hcp_test, hcp_train]
+    #
+    # # 1. Save as tsv
+    # # eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
+    # #               t_datasets=T.name.to_numpy()[test_datasets_list],
+    # #               type=types, subj=sub_list, out_name='hcpTs')
+    #
+    # # 2. Check within and between curve on HCP raw timeseries
+    # corrW, corrB = eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
+    #                              t_datasets=T.name.to_numpy()[test_datasets_list],
+    #                              type=types, subj=sub_list, out_name='hcpTs',
+    #                              save=False, plot_wb=True)
+    # corrW = pt.nanmean(pt.stack([pt.stack(s) for s in corrW]), dim=0)
+    # corrB = pt.nanmean(pt.stack([pt.stack(s) for s in corrB]), dim=0)
+    # corrW = [corrW.unbind(dim=0)]
+    # corrB = [corrB.unbind(dim=0)]
+    #
+    # plot_existing_corr_wb(corrW, corrB, par_name=['Anatom', 'Buckner7',
+    #                                               'Buckner17', 'Ji10', 'MDTB10'],
+    #                       datasets=['HCP'])
 
     # ############# Plot evaluation #############
-    fname = f'/Models/Evaluation/eval_all_5existing_on_hcpTs.tsv'
+    fname = f'/Models/Evaluation/eval_all_5existing_on_taskDatasets.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_existing(D, t_data=None, outName='hcpTs')
+    plot_existing(D, t_data=None, outName='7tasks')
 
     ############# Plot fusion atlas #############
     # Making color map
