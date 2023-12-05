@@ -300,7 +300,7 @@ def get_colormap_from_lut(fname=base_dir + '/Atlases/tpl-SUIT/atl-MDTB10.lut'):
     """
     color_info = pd.read_csv(fname, sep=' ', header=None)
     color_map = np.zeros((color_info.shape[0] + 1, 3))
-    color_map = color_info.iloc[:, 1:4].to_numpy()
+    color_map[1:, :] = color_info.iloc[:, 1:4].to_numpy()
     return color_map
 
 def get_cmap(mname, load_best=True, sym=False):
