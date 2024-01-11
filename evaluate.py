@@ -32,10 +32,13 @@ from FusionModel.util import *
 
 # Find model directory to save model fitting results
 model_dir = 'Y:\data\Cerebellum\ProbabilisticParcellationModel'
+home = str(Path.home())
 if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/Volumes/diedrichsen_data$/data/Cerebellum/ProbabilisticParcellationModel'
+if not Path(model_dir).exists():
+    model_dir = str(Path(home, 'diedrichsen_data/data/Cerebellum/ProbabilisticParcellationModel'))
 if not Path(model_dir).exists():
     raise (NameError('Could not find model_dir'))
 
@@ -44,6 +47,8 @@ if not Path(base_dir).exists():
     base_dir = '/srv/diedrichsen/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = 'Y:\data\FunctionalFusion'
+if not Path(base_dir).exists():
+    base_dir = str(Path(home, 'diedrichsen_data/data/FunctionalFusion'))
 if not Path(base_dir).exists():
     raise (NameError('Could not find base_dir'))
 
