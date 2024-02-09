@@ -1,3 +1,4 @@
+from turtle import title
 import numpy as np
 import nibabel as nb
 import SUITPy as suit
@@ -25,6 +26,8 @@ home = str(Path.home())
 if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
+    model_dir = '/cifs/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
+if not Path(model_dir).exists():
     model_dir = '/Volumes/diedrichsen_data$/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/Users/callithrix/Documents/Projects/Functional_Fusion/'
@@ -38,6 +41,8 @@ if not Path(model_dir).exists():
 base_dir = '/Volumes/diedrichsen_data$/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = '/srv/diedrichsen/data/FunctionalFusion'
+if not Path(base_dir).exists():
+    base_dir = '/cifs/diedrichsen/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = 'Y:\data\FunctionalFusion'
 if not Path(base_dir).exists():
@@ -473,8 +478,9 @@ def plot_multi_flat(data, atlas, grid,
         plt.tight_layout()
         # if titles is not None:
         #     # plt.title(titles[i])
-        #     # if save_fig:
-        #     #     fname = f'rel_{titles[i]}.png'
+            # if save_fig:
+                # plt.savefig(f'{titles}.png')
+            #     fname = f'rel_{titles[i]}.png'
         #     #     if save_under is not None:
         #     #         fname = save_under
         #     #     plt.savefig(fname, format='png')

@@ -36,6 +36,8 @@ home = str(Path.home())
 if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
+    model_dir = '/cifs/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
+if not Path(model_dir).exists():
     model_dir = '/Volumes/diedrichsen_data$/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = str(Path(home, 'diedrichsen_data/data/Cerebellum/ProbabilisticParcellationModel'))
@@ -45,6 +47,8 @@ if not Path(model_dir).exists():
 base_dir = '/Volumes/diedrichsen_data$/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = '/srv/diedrichsen/data/FunctionalFusion'
+if not Path(base_dir).exists():
+    base_dir = '/cifs/diedrichsen/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = 'Y:\data\FunctionalFusion'
 if not Path(base_dir).exists():
