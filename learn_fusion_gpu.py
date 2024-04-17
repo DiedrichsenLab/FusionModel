@@ -158,10 +158,10 @@ def build_model(K, arrange, sym_type, emission, atlas, cond_vec, part_vec,
                                  X=matrix.indicator(cond_vec[j]),
                                  part_vec=part_vec[j],
                                  uniform_kappa=uniform_kappa)
-            trained_emi = f'Models_03/asym_Ib_space-fs32k_L_K-{K}_independent'
-            _, model = ut.load_batch_best(trained_emi, device='cuda')
-            em_model.V = model.emissions[j].V
-            em_model.kappa = model.emissions[j].kappa
+            # trained_emi = f'Models_03/asym_Ib_space-fs32k_L_K-{K}_independent'
+            # _, model = ut.load_batch_best(trained_emi, device='cuda')
+            # em_model.V = model.emissions[j].V
+            # em_model.kappa = model.emissions[j].kappa
         elif emission == 'GMM':
             em_model = em.MixGaussian(K=K, P=atlas.P,
                                       X=matrix.indicator(cond_vec[j]),
@@ -186,7 +186,7 @@ def batch_fit(datasets, sess,
               type=None, cond_ind=None, part_ind=None, subj=None,
               atlas=None,
               K=10,
-              arrange='cRBM_Wc',
+              arrange='independent',
               sym_type='asym',
               emission='VMF',
               n_rep=3, n_inits=10, n_iter=80, first_iter=10,
@@ -364,8 +364,8 @@ def batch_fit(datasets, sess,
             f'Done fit: repetition {i} - {name} - {iter_toc - iter_tic:0.4f} seconds!')
 
     models = np.array(models, dtype=object)
-    plt.plot(tt.T)
-    plt.show()
+    # plt.plot(tt.T)
+    # plt.show()
 
     return info, models
 
@@ -460,7 +460,7 @@ def fit_all(set_ind=[0, 1, 2, 3], K=10, repeats=100, model_type='01',
 
         # Save the fits and information
         wdir = ut.model_dir + f'/Models/Models_{model_type}'
-        fname = f'/{name}_space-{this_space}_K-{K}_cRBM_Wc-{Wc_theta}'
+        fname = f'/{name}_space-{this_space}_K-{K}'
 
         if this_sess is not None:
             return wdir, fname, info, models
@@ -650,9 +650,9 @@ def refit_model(model, new_info):
 
 
 if __name__ == "__main__":
-    datasets_list = [1, 7]
-    for k in [10, 20, 34, 40, 68, 100]:
-        fit_all(set_ind=datasets_list, K=k, repeats=100, model_type='03',
-                sym_type=['asym'], space='MNISymC3')
+    datasets_list = [[1,2,3,4,5,6]]
+    for ds in datasets_list:
+        for k in [200, 300]:
+            fit_all(set_ind=ds, K=k, repeats=100, model_type='04',
+                    sym_type=['asym'], space='MNISymC3')
 
-    pass

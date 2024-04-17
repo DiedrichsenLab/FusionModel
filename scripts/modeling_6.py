@@ -32,7 +32,6 @@ from itertools import combinations
 import FusionModel.util as ut
 from FusionModel.evaluate import *
 import FusionModel.similarity_colormap as sc
-import FusionModel.hierarchical_clustering as cl
 from FusionModel.learn_fusion_gpu import *
 
 # pytorch cuda global flag
