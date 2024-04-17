@@ -50,7 +50,7 @@ if not Path(base_dir).exists():
 if not Path(base_dir).exists():
     base_dir = '/cifs/diedrichsen/data/FunctionalFusion'
 if not Path(base_dir).exists():
-    base_dir = 'Y:\data\FunctionalFusion'
+    base_dir = '/data/tge/Tian/UKBB_full/imaging'
 if not Path(base_dir).exists():
     base_dir = str(Path(home, 'diedrichsen_data/data/FunctionalFusion'))
 if not Path(base_dir).exists():
@@ -164,6 +164,42 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
         return pt.stack(dcbc_values), D_all
     else:
         return pt.stack(dcbc_values)
+
+
+def calc_test_homogeneity(parcels, testdata, verbose=True):
+    """Homogeneity: evaluate the resultant parcellation using homogeneity
+    
+    Args:
+        parcels (torch.Tensor): the input probabilistic parcellation:
+            either group parcellation (2-dimensional: K x P) or
+            individual parcellation (num_subj x K x P )
+        testdata (torch.Tensor): the functional test dataset,
+                                shape (num_sub, N, P)
+        verbose (boolean): if true, display used time per each subject
+            evaluation. Otherwise, no display
+                            
+    Returns:
+        homo_values (torch.Tensor): the homogeneity values of subjects
+    """
+
+    homo_values = []
+    for sub in range(testdata.shape[0]):
+        tic = time.perf_counter()
+        if parcels.ndim == 2:
+            D = ev.homogeneity(testdata[sub], parcels,
+                               z_transfer=True)
+        elif parcels.ndim == 3:
+            D = ev.homogeneity(testdata[sub], parcels[sub],
+                               z_transfer=True)
+        else:
+            raise ValueError('The input parcellation must be 2D or 3D')
+    
+        homo_values.append(D)
+        toc = time.perf_counter()
+        if verbose:
+            print(f"Subject {sub}: {toc-tic:0.4f}s")
+
+    return pt.stack(homo_values)
 
 
 def run_prederror(model_names, test_data, test_sess, cond_ind,
