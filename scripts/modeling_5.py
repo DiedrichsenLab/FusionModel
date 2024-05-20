@@ -61,7 +61,7 @@ atlas_dir = base_dir + f'/Atlases'
 res_dir = model_dir + f'/Results' + '/5.all_datasets_fusion'
 
 def result_5_eval(K=10, symmetric='asym', model_type=None, model_name=None,
-                  t_datasets=None, return_df=False):
+                  t_datasets=None, subj=None, return_df=False):
     """Evaluate group and individual DCBC and coserr of all dataset fusion
        and any dataset training standalone on each of the datasets.
     Args:
@@ -93,7 +93,7 @@ def result_5_eval(K=10, symmetric='asym', model_type=None, model_name=None,
         # 1. Run DCBC individual
         res_dcbc = run_dcbc_individual(m_name, ds, 'all', cond_ind=None,
                                        part_ind='half', indivtrain_ind='half',
-                                       indivtrain_values=[1,2], device='cuda')
+                                       indivtrain_values=[1,2], subj=subj, device='cuda')
         # 2. Run coserr individual
         # res_coserr = run_prederror(m_name, ds, 'all', cond_ind=None,
         #                            part_ind='half', eval_types=['group', 'floor'],
@@ -110,6 +110,61 @@ def result_5_eval(K=10, symmetric='asym', model_type=None, model_name=None,
         wdir = model_dir + f'/Models/Evaluation'
         fname = f'/eval_all_{symmetric}_K-{K}_datasetFusion.tsv'
         results.to_csv(wdir + fname, index=False, sep='\t')
+
+def result_5_dice(K=10, symmetric='asym', model_type=None, model_name=None,
+                  t_datasets='MDTB', subj=None):
+    """Evaluate group and individual DCBC and coserr of all dataset fusion
+       and any dataset training standalone on each of the datasets.
+    Args:
+        K: the number of parcels
+        t_datasets (list): a list of test datasets
+    Returns:
+        Write in evaluation file
+    """
+    # Preparing model type, name, and test set is not given
+    if model_type is None:
+        model_type = ['01','02','03','04','05']
+    if model_name is None:
+        model_name = ['Md','Po','Ni','Ib','Wm','De','So','MdPoNiIbWmDeSo']
+
+    this_type = 'Ico162Run' if t_datasets =='HCP' else None
+    # this_type = 'CondAll' if t_datasets == 'MDTB' else None
+
+    tdata, info, tds = ds.get_dataset(base_dir, t_datasets, atlas='MNISymC3',
+                                       sess='all', subj=subj, type=this_type)
+
+    tdata, cond_v, part_v, sub_ind = fm.prep_datasets(tdata, info.sess,
+                                                      info['cond_num_uni'].values,
+                                                      info['half'].values,
+                                                      join_sess=False,
+                                                      join_sess_part=False)
+
+    # convert tdata to tensor
+    atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
+
+    results = pd.DataFrame()
+    # Evaluate all single sessions on other datasets
+    for t in model_type:
+        U_indiv = []
+        print(f'- Start evaluating Model_{t} - {model_name}...')
+        # Get all individual parcellations per model
+        for mn in model_name:
+            print(f'Testdata: {ds}\n')
+            m_name = f'/Models/Models_{t}/{symmetric}_{mn}_space-MNISymC3_K-{K}'
+            # 1. Run DCBC individual
+            U, _ = ar.load_group_parcellation(model_dir + m_name, device='cuda')
+            ar_model = ar.build_arrangement_model(U, prior_type='logpi', atlas=atlas,
+                                                  sym_type='asym')
+
+            indiv_par, _, M = fm.get_indiv_parcellation(ar_model, atlas, tdata,
+                                                        cond_v, part_v,
+                                                        [np.arange(0,24),np.arange(0,24)],
+                                                        em_params={'uniform_kappa': False})
+            U_indiv.append(indiv_par)
+
+            results = pd.concat([results, res_dcbc], ignore_index=True)
+
+    return results
 
 def result_5_plot(fname, model_type='Models_01'):
     D = pd.read_csv(model_dir + fname, delimiter='\t')
@@ -151,7 +206,7 @@ def result_5_benchmark(fname, benchmark='MDTB', save=False):
         plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, fontsize='small')
         # plt.xticks(rotation=45)
         if c == 'dcbc_group':
-            plt.ylim(0.02, 0.12)
+            plt.ylim(0.02, 0.13)
         elif c == 'dcbc_indiv':
             plt.ylim(0.1, 0.18)
 
@@ -190,21 +245,14 @@ def plot_diffK_benchmark(fname, benchmark='MDTB', save=False):
                                 "'Somatotopic']")]
     D = D.replace("['Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']", 'all')
     df = D.loc[(D['test_data'] == benchmark)]
-    df1 = df.loc[df['indiv_train_kappa'] == True]
-    df2 = df.loc[df['indiv_train_kappa'] == False]
+    # df1 = df.loc[df['indiv_train_kappa'] == True]
+    # df2 = df.loc[df['indiv_train_kappa'] == False]
 
-    plt.figure(figsize=(10, 10))
-    crits = ['dcbc_indiv','dcbc_indiv','coserr_ind3','coserr_ind3']
+    plt.figure(figsize=(8, 5))
+    crits = ['dcbc_group','dcbc_indiv']
     for i, c in enumerate(crits):
-        plt.subplot(2, 2, i + 1)
-        if i == 0 or i == 2:
-            this_df = df1
-            plt.title('indiv_train_kappa=True')
-        else:
-            this_df = df2
-            plt.title('indiv_train_kappa=False')
-
-        sb.lineplot(data=this_df, x='K', y=c,
+        plt.subplot(1, 2, i + 1)
+        sb.lineplot(data=df, x='K', y=c,
                     hue='model_type', hue_order=['Models_03', 'Models_04'],
                     style="train_data",
                     style_order=["all", "['Pontine']", "['Nishimoto']", "['IBC']",
@@ -212,9 +260,9 @@ def plot_diffK_benchmark(fname, benchmark='MDTB', save=False):
                     palette=sb.color_palette()[1:3],
                     errorbar=None, err_style="bars", markers=False)
         if c == 'dcbc_group':
-            plt.ylim(0.01, 0.1)
+            plt.ylim(0.01, 0.16)
         elif c == 'dcbc_indiv':
-            plt.ylim(0.1, 0.19)
+            plt.ylim(0.09, 0.20)
 
         if i == len(crits)-1:
             plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, fontsize='small')
@@ -371,44 +419,98 @@ def plot_gmm_vs_vmf(fname, benchmark=None, save=False):
         plt.savefig(f'all_datasets_fusion.pdf', format='pdf')
     plt.show()
 
-if __name__ == "__main__":
-    ############# Evaluating indiv datasets vs fusion #############
+def eval_single_vs_fusion_on_rest():
     T = pd.read_csv(base_dir + '/dataset_description.tsv', sep='\t')
     D = pd.DataFrame()
     # datasets_list = [[0], [1], [2], [3], [4], [5], [6], [0, 1, 2, 3, 4, 5, 6]]
-    for i in range(1):
-        datasets = [0, 1, 2, 3, 4, 5, 6]
-        datasets.remove(i)
-        for k in [10,17,20,34,40,68,100]:
+    datasets = [1,2,3,4,5,6]
+    for k in [10,17,20,34,40,68,100]:
+        for sub in [0,25,50,75]:
             datanames = T.two_letter_code[datasets].to_list()
             datanames += [''.join(T.two_letter_code[datasets])]
             res = result_5_eval(K=k, symmetric='asym', model_type=['03','04'],
-                                model_name=datanames, t_datasets=[T.name[i]],
-                                return_df=True)
+                                model_name=datanames, t_datasets=[T.name[7]],
+                                subj=np.arange(sub,sub+25), return_df=True)
             D = pd.concat([D, res], ignore_index=True)
+
     wdir = model_dir + f'/Models/Evaluation/asym'
-    fname = f'/eval_dataset7_asym_dcbc_true.tsv'
+    fname = f'/eval_indiv-fusion_asym_dcbc_k-10_to_100_HcIcos.tsv'
     D.to_csv(wdir + fname, index=False, sep='\t')
 
+def eval_single_vs_fusion_dice():
+    T = pd.read_csv(base_dir + '/dataset_description.tsv', sep='\t')
+    D = pd.DataFrame()
+    # datasets_list = [[0], [1], [2], [3], [4], [5], [6], [0, 1, 2, 3, 4, 5, 6]]
+    datasets = [1,2,3,4,5,6]
+    for k in [10,17,20,34,40,68,100]:
+        # for sub in [0,25,50,75]:
+        datanames = T.two_letter_code[datasets].to_list()
+        datanames += [''.join(T.two_letter_code[datasets])]
+        res = result_5_dice(K=k, symmetric='asym', model_type=['03','04'],
+                            model_name=datanames, t_datasets='MDTB', subj=None)
+
+        # res = result_5_dice(K=k, symmetric='asym', model_type=['03', '04'],
+        #                     model_name=datanames, t_datasets='MDTB',
+        #                     subj=np.arange(sub, sub + 25))
+
+        D = pd.concat([D, res], ignore_index=True)
+
+    wdir = model_dir + f'/Models/Evaluation/asym'
+    fname = f'/eval_indiv-fusion_asym_dcbc_k-10_to_100_HcIcos.tsv'
+    D.to_csv(wdir + fname, index=False, sep='\t')
+
+    result_5_dice(K=10, symmetric='asym', model_type=None, model_name=None,
+                  t_datasets='MDTB', subj=None)
+
+if __name__ == "__main__":
+    ############# Evaluating indiv datasets vs fusion #############
+    # eval_single_vs_fusion_on_rest()
+    eval_single_vs_fusion_dice()
+
+    # T = pd.read_csv(base_dir + '/dataset_description.tsv', sep='\t')
+    # D = pd.DataFrame()
+    # # datasets_list = [[0], [1], [2], [3], [4], [5], [6], [0, 1, 2, 3, 4, 5, 6]]
+    # for i in range(1):
+    #     datasets = [0, 1, 2, 3, 4, 5, 6]
+    #     datasets.remove(i)
+    #     for k in [200, 300]:
+    #         datanames = T.two_letter_code[datasets].to_list()
+    #         datanames += [''.join(T.two_letter_code[datasets])]
+    #         res = result_5_eval(K=k, symmetric='asym', model_type=['04'],
+    #                             model_name=datanames, t_datasets=[T.name[i]],
+    #                             return_df=True)
+    #         D = pd.concat([D, res], ignore_index=True)
+    # wdir = model_dir + f'/Models/Evaluation/asym'
+    # fname = f'/eval_dataset7_asym_dcbc_k-200_to_300.tsv'
+    # D.to_csv(wdir + fname, index=False, sep='\t')
+
     ############# Plot results #############
-    fname = f'/Models/Evaluation/asym/eval_dataset7_asym.tsv'
+    fname = f'/Models/Evaluation/asym/eval_indiv-fusion_asym_dcbc_k-10_to_100_HcIcos_type3Indv.tsv'
     # result_5_plot(fname, model_type='Models_03')
-    # result_5_benchmark(fname, benchmark='MDTB', save=False)
+    result_5_benchmark(fname, benchmark='HCP', save=False)
+    plot_diffK_benchmark(fname, benchmark='HCP', save=False)
+    # result_5_benchmark_ext(fname, benchmark='HCP', save=False)
     # plot_diffK_benchmark(fname, save=False)
-    # result_5_benchmark_ext(fname, benchmark='MDTB', save=False)
-    plot_diffK_benchmark(fname, save=False)
 
     ############# Plot fusion atlas #############
-    indiv_dataset = ['Po', 'Ni', 'Ib', 'Wm', 'De', 'So']
-    m_fusion = ''.join(indiv_dataset)
-    datasets = [m_fusion] + indiv_dataset
-    # Making color map
-    colors = get_cmap(f'Models_04/asym_{m_fusion}_space-MNISymC3_K-34')
-    model_names = [f'Models_04/asym_{s}_space-MNISymC3_K-34' for s in datasets]
+    # indiv_dataset = ['Po', 'Ni', 'Ib', 'Wm', 'De', 'So']
+    # m_fusion = ''.join(indiv_dataset)
+    # datasets = [m_fusion] + indiv_dataset
+    # # Making color map
+    # colors = get_cmap(f'Models_04/asym_{m_fusion}_space-MNISymC3_K-34')
+    # model_names = [f'Models_04/asym_{s}_space-MNISymC3_K-34' for s in datasets]
+    #
+    # # plt.figure(figsize=(20, 10))
+    # plot_model_parcel(model_names, [2, 4], cmap=colors, align=True, device='cuda')
+    # plt.show()
 
-    # plt.figure(figsize=(20, 10))
-    plot_model_parcel(model_names, [2, 4], cmap=colors, align=True, device='cuda')
-    plt.show()
+    ############# Plot fusion atlas (different K) #############
+    for k in [200, 300]:
+        fname = f'Models_04/asym_PoNiIbWmDeSo_space-MNISymC3_K-{k}'
+        colors = get_cmap(fname)
+        plot_model_parcel([fname], [1, 1], cmap=colors, align=True, device='cuda')
+        plt.savefig(f'asym_PoNiIbWmDeSo_space-MNISymC3_K-{k}.png', format='png')
+        plt.show()
 
     ############# GMM vs. vMF #############
     # m_name = ['Models_03/asym_Md_space-MNISymC3_K-10',

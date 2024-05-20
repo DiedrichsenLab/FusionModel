@@ -367,6 +367,48 @@ def plot_loo_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run'], model_type='03'):
     plt.tight_layout()
     plt.show()
 
+def plot_result6_rest(D, t_data=['HCP_Net69Run','HCP_Ico162Run']):
+    num_td = len(t_data)
+    T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
+
+    D = D.replace(["['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic' 'HCP']",
+                   "['MDTB' 'Pontine' 'Nishimoto' 'IBC' 'WMFS' 'Demand' 'Somatotopic']",
+                   "['HCP']"], ['task+rest', 'task', 'rest'])
+
+    plt.figure(figsize=(10*num_td, 20))
+    for i, td in enumerate(t_data):
+        this_D = D.loc[D.test_data == td]
+
+        df1 = this_D.loc[this_D.model_type == 'Models_03'].reset_index()
+        df2 = this_D.loc[this_D.model_type == 'Models_04'].reset_index()
+        df_toadd = df1.copy()
+
+        df_toadd.loc[:, 'dcbc_group'] = (df1.dcbc_group.to_numpy() + df2.dcbc_group.to_numpy()) / 2
+        df_toadd.loc[:, 'dcbc_indiv'] = (df1.dcbc_indiv.to_numpy() + df2.dcbc_indiv.to_numpy()) / 2
+        df_toadd['model_type'].replace(['Models_03'], 'Average', inplace=True)
+        this_D = pd.concat([this_D, df_toadd], ignore_index=True)
+
+        plt.subplot(2, num_td, i+1)
+        # sb.lineplot(data=this_D, x='K', y='dcbc_group', hue='train_data',
+        #             hue_order=['rest', 'task', 'task+rest'], errorbar='se', markers=False)
+        sb.barplot(data=this_D, x='train_data', y='dcbc_group', hue='model_type',
+                   errorbar="se")
+        plt.ylim(0.06, 0.13)
+        plt.title(td)
+
+        plt.subplot(2, num_td, i+num_td+1)
+        # sb.lineplot(data=this_D, x='K', y='dcbc_indiv', hue='train_data',
+        #             hue_order=['rest', 'task', 'task+rest'], errorbar='se', markers=False)
+        sb.barplot(data=this_D, x='train_data', y='dcbc_indiv', hue='model_type',
+                   errorbar="se")
+        plt.ylim(0.13, 0.16)
+        plt.title(td)
+
+    plt.suptitle(f'Task, rest, task+rest, test_data=rest')
+    plt.tight_layout()
+    plt.savefig('result6_oN_HcEven.pdf', format='pdf')
+    plt.show()
+
 if __name__ == "__main__":
     ############# Fitting models #############
     # for i in [6,5,4,3,2,1,0]:
@@ -438,9 +480,10 @@ if __name__ == "__main__":
     # plot_loo_task_avrg(D, save=True)
 
     # 2. evaluation on rest
-    # fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
-    # D = pd.read_csv(model_dir + fname, delimiter='\t')
-    # plot_loo_rest(D, model_type='03')
+    fname = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_HcEven.tsv'
+    D = pd.read_csv(model_dir + fname, delimiter='\t')
+    # plot_loo_rest(D, t_data=['HCP_Ico162Run'], model_type='03')
+    plot_result6_rest(D, t_data=['HCP_Ico162Run'])
 
     # 3. Plot evaluation of result 6
     # fname1 = f'/Models/Evaluation/eval_all_asym_K-10to100_7taskHcOdd_on_looTask.tsv'

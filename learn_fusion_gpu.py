@@ -19,6 +19,7 @@ import HierarchBayesParcel.spatial as sp
 import HierarchBayesParcel.arrangements as ar
 import HierarchBayesParcel.emissions as em
 import HierarchBayesParcel.evaluation as ev
+import HierarchBayesParcel.util as hut
 import torch as pt
 import matplotlib.pyplot as plt
 import pickle
@@ -269,7 +270,7 @@ def batch_fit(datasets, sess,
 
     del Wc
     pt.cuda.empty_cache()
-    fm.report_cuda_memory()
+    hut.report_cuda_memory()
 
     # Initialize data frame for results
     models, priors = [], []
@@ -299,7 +300,7 @@ def batch_fit(datasets, sess,
         # Attach the data
         m.initialize(data, subj_ind=subj_ind)
         pt.cuda.empty_cache()
-        fm.report_cuda_memory()
+        hut.report_cuda_memory()
 
         # Swith the learning process between independent and RBMs
         if m.arrange.name.startswith('indp'):
@@ -357,7 +358,7 @@ def batch_fit(datasets, sess,
         # Move to CPU device before storing
         m.move_to(device='cpu')
         models.append(m)
-        pt.cuda.empty_cache()
+        hut.cuda.empty_cache()
 
         iter_toc = time.perf_counter()
         print(
@@ -650,9 +651,12 @@ def refit_model(model, new_info):
 
 
 if __name__ == "__main__":
-    datasets_list = [[1,2,3,4,5,6]]
-    for ds in datasets_list:
-        for k in [200, 300]:
-            fit_all(set_ind=ds, K=k, repeats=100, model_type='04',
-                    sym_type=['asym'], space='MNISymC3')
+    # datasets_list = [[1], [2], [3], [4], [5], [6]]
+    # for ds in datasets_list:
+    #     for k in [200, 300]:
+    #         fit_all(set_ind=ds, K=k, repeats=100, model_type='03',
+    #                 sym_type=['asym'], space='MNISymC3')
+
+    fit_all(set_ind=[0,7], K=10, repeats=100, model_type='03',
+            sym_type=['asym'], space='MNISymC3')
 

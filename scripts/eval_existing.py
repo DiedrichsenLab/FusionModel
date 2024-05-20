@@ -150,20 +150,29 @@ def run_dcbc_existing(model_names, tdata, space, device=None, load_best=True, ve
         print(f"Doing model {model_name}\n")
         if verbose:
             ut.report_cuda_memory()
-        # load existing parcellation
-        par = nb.load(atlas_dir +
-                      f'/{space_dir}/atl-{model_name}_space-{space_name}_dseg.nii')
-        Pgroup = pt.tensor(atlas.read_data(par, 0),
-                           dtype=pt.get_default_dtype())
+
+        if model_name.startswith('/Models'):
+            # Our pre-trained model
+            minfo, model = load_batch_best(f"{model_name}", device=device)
+            Prop = model.marginal_prob()
+            Pgroup = pt.argmax(Prop, dim=0) + 1
+        else:
+            # load existing parcellation
+            par = nb.load(atlas_dir +
+                          f'/{space_dir}/atl-{model_name}_space-{space_name}_dseg.nii')
+            Pgroup = pt.tensor(atlas.read_data(par, 0),
+                               dtype=pt.get_default_dtype())
+
         Pgroup = pt.where(Pgroup==0, pt.tensor(float('nan')), Pgroup)
         this_res = pd.DataFrame()
         # ------------------------------------------
         # Now run the DCBC evaluation fo the group only
-        dcbc_group, corr_w, corr_b = calc_test_dcbc(Pgroup, tdata, dist,
-                                                    max_dist=110, bin_width=5,
-                                                    trim_nan=True, return_wb_corr=True)
-        cw.append(pt.stack(corr_w))
-        cb.append(pt.stack(corr_b))
+        dcbc_group = calc_test_dcbc(Pgroup, tdata, dist,
+                                    max_dist=110, bin_width=5,
+                                    trim_nan=True, return_wb_corr=False)
+        homo_group = calc_test_homogeneity(Pgroup, tdata)
+        # cw.append(pt.stack(corr_w))
+        # cb.append(pt.stack(corr_b))
         # ------------------------------------------
         # Collect the information from the evaluation
         # in a data frame
@@ -176,7 +185,7 @@ def run_dcbc_existing(model_names, tdata, space, device=None, load_best=True, ve
                               'common_kappa': [np.nan] * num_subj})
         # Add all the evaluations to the data frame
         ev_df['dcbc_group'] = dcbc_group.cpu()
-        ev_df['dcbc_indiv'] = np.nan
+        ev_df['homo_group'] = homo_group.cpu()
         this_res = pd.concat([this_res, ev_df], ignore_index=True)
 
         # Concate model type
@@ -188,7 +197,7 @@ def run_dcbc_existing(model_names, tdata, space, device=None, load_best=True, ve
             this_res['test_sess'] = 'all'
         results = pd.concat([results, this_res], ignore_index=True)
 
-    return results, cw, cb
+    return results
 
 def eval_existing(model_name, t_datasets=['MDTB','Pontine','Nishimoto'],
                   type=None, subj=None, out_name=None, save=True, plot_wb=True):
@@ -218,11 +227,11 @@ def eval_existing(model_name, t_datasets=['MDTB','Pontine','Nishimoto'],
         if type[i] == 'Tseries':
             tds.cond_ind = 'time_id'
 
-        res_dcbc, corr_w, corr_b = run_dcbc_existing(model_name, tdata, 'MNISymC3',
-                                                     device='cuda')
+        res_dcbc = run_dcbc_existing(model_name, tdata, 'MNISymC3',
+                                     device='cuda')
 
-        corrW.append(corr_w)
-        corrB.append(corr_b)
+        # corrW.append(corr_w)
+        # corrB.append(corr_b)
         res_dcbc['test_data'] = ds
         results = pd.concat([results, res_dcbc], ignore_index=True)
 
@@ -230,27 +239,29 @@ def eval_existing(model_name, t_datasets=['MDTB','Pontine','Nishimoto'],
         # Save file
         wdir = model_dir + f'/Models/Evaluation'
         if out_name is None:
-            fname = f'/eval_all_5existing_on_otherdatasets.tsv'
+            fname = f'/eval_all_existingAndFusion_on_otherdatasets.tsv'
         else:
-            fname = f'/eval_all_5existing_on_{out_name}.tsv'
+            fname = f'/eval_all_existingAndFusion_on_{out_name}.tsv'
         results.to_csv(wdir + fname, index=False, sep='\t')
 
-    if plot_wb:
-        return corrW, corrB
+    # if plot_wb:
+    #     return corrW, corrB
 
 def plot_existing(D, t_data='MDTB', outName='7Tasks'):
     if t_data is not None:
         D = D.loc[D.test_data == t_data]
 
-    plt.figure(figsize=(10, 5))
-    crits = ['dcbc_group']
+    plt.figure(figsize=(10, 10))
+    crits = ['dcbc_group', 'homo_group']
     for i, c in enumerate(crits):
-        plt.subplot(1, 2, i + 1)
+        plt.subplot(2, 2, i*2 + 1)
         sb.barplot(data=D, x='model_name', y=c, errorbar="se")
+        plt.xticks(rotation=45)
 
-        plt.subplot(1, 2, i + 2)
+        plt.subplot(2, 2, i*2 + 2)
         sb.barplot(data=D, x='test_data', y=c, hue='model_name',
                    errorbar="se")
+        plt.xticks(rotation=45)
 
     plt.suptitle(f'Existing parcellations, t_data={outName}')
     plt.tight_layout()
@@ -307,14 +318,15 @@ if __name__ == "__main__":
     # plt.show()
 
     ############# Evaluating models #############
-    # test_datasets_list = [7,7]
+    # test_datasets_list = [0,7,7,7,7]
     # T = pd.read_csv(ut.base_dir + '/dataset_description.tsv', sep='\t')
     # num_subj = T.return_nsubj.to_numpy()[test_datasets_list]
     # sub_list = [np.arange(c) for c in num_subj]
     #
-    # # types = T.default_type.to_numpy()[test_datasets_list]
-    # types = ['Tseries', 'Tseries']
-    # sub_list = [np.arange(0, 100, 2), np.arange(0, 100, 2)+1]
+    # types = T.default_type.to_numpy()[test_datasets_list]
+    # types = ['CondAll','Tseries','Tseries','Tseries','Tseries']
+    # sub_list = [None, np.arange(0,100, 4), np.arange(0,100, 4)+1,
+    #             np.arange(0,100, 4)+2, np.arange(0,100, 4)+3]
     #
     # # Making half hcp resting subjects data
     # # sub_list = [np.arange(c) for c in num_subj[:-2]]
@@ -328,23 +340,29 @@ if __name__ == "__main__":
     # #               type=types, subj=sub_list, out_name='hcpTs')
     #
     # # 2. Check within and between curve on HCP raw timeseries
-    # corrW, corrB = eval_existing(['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10'],
-    #                              t_datasets=T.name.to_numpy()[test_datasets_list],
-    #                              type=types, subj=sub_list, out_name='hcpTs',
-    #                              save=False, plot_wb=True)
+    # to_test = ['Anatom', 'Buckner7', 'Buckner17', 'Ji10', 'MDTB10']
+    # K = [10,17,20,34,40,68,100]
+    # to_test =  to_test + [f'/Models_03/asym_PoNiIbWmDeSo_space-MNISymC3_K-{k}' for k in K] \
+    #            + [f'/Models_04/asym_PoNiIbWmDeSo_space-MNISymC3_K-{k}' for k in K]
+    # to_test = [f'/Models_03/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-{k}' for k in K] \
+    #           + [F'/Models_04/asym_MdPoNiIbWmDeSo_space-MNISymC3_K-{k}' for k in K]
+    #
+    # eval_existing(to_test, t_datasets=T.name.to_numpy()[test_datasets_list],
+    #               type=types, subj=sub_list, out_name='HCP-MDTB',
+    #               save=True, plot_wb=False)
     # corrW = pt.nanmean(pt.stack([pt.stack(s) for s in corrW]), dim=0)
     # corrB = pt.nanmean(pt.stack([pt.stack(s) for s in corrB]), dim=0)
     # corrW = [corrW.unbind(dim=0)]
     # corrB = [corrB.unbind(dim=0)]
-    #
+
     # plot_existing_corr_wb(corrW, corrB, par_name=['Anatom', 'Buckner7',
     #                                               'Buckner17', 'Ji10', 'MDTB10'],
     #                       datasets=['HCP'])
 
     # ############# Plot evaluation #############
-    fname = f'/Models/Evaluation/eval_all_5existing_on_taskDatasets.tsv'
+    fname = f'/Models/Evaluation/eval_all_existingAndFusion_on_HCPTseries.tsv'
     D = pd.read_csv(model_dir + fname, delimiter='\t')
-    plot_existing(D, t_data=None, outName='7tasks')
+    plot_existing(D, t_data='HCP', outName='HCP-MDTB')
 
     ############# Plot fusion atlas #############
     # Making color map

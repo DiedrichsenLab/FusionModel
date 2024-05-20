@@ -185,10 +185,10 @@ def calc_test_homogeneity(parcels, testdata, verbose=True):
     homo_values = []
     for sub in range(testdata.shape[0]):
         tic = time.perf_counter()
-        if parcels.ndim == 2:
+        if parcels.ndim == 1:
             D = ev.homogeneity(testdata[sub], parcels,
                                z_transfer=True)
-        elif parcels.ndim == 3:
+        elif parcels.ndim == 2:
             D = ev.homogeneity(testdata[sub], parcels[sub],
                                z_transfer=True)
         else:
@@ -588,7 +588,7 @@ def run_dcbc(model_names, train_data, test_data, dist, cond_vec, part_vec,
 def run_dcbc_individual(model_names, test_data, test_sess,
                         cond_ind=None, part_ind=None,
                         indivtrain_ind=None, indivtrain_values=[0],
-                        device=None, load_best=True):
+                        subj=None, device=None, load_best=True):
     """ Calculates DCBC using a test_data set
     and test_sess.
     if indivtrain_ind is given, it splits the test_data set
@@ -611,8 +611,9 @@ def run_dcbc_individual(model_names, test_data, test_sess,
     Returns:
         data-frame with model evalution
     """
-    tdata, tinfo, tds = ds.get_dataset(base_dir, test_data,
-                                       atlas='MNISymC3', sess=test_sess)
+    this_type = 'Ico162Run' if test_data =='HCP' else None
+    tdata, tinfo, tds = ds.get_dataset(base_dir, test_data, atlas='MNISymC3',
+                                       sess=test_sess, subj=subj, type=this_type)
     atlas, _ = am.get_atlas('MNISymC3', atlas_dir=base_dir + '/Atlases')
     dist = compute_dist(atlas.world.T, resolution=1)
 
@@ -654,7 +655,7 @@ def run_dcbc_individual(model_names, test_data, test_sess,
 
         Prop = model.marginal_prob()
 
-        model_kp = True
+        model_kp = model.emissions[0].uniform_kappa
         this_res = pd.DataFrame()
         # Loop over the splits - if split then train a individual model
         for n in range(n_splits):
@@ -722,7 +723,7 @@ def run_dcbc_individual(model_names, test_data, test_sess,
                                   'test_data': [test_data] * num_subj,
                                   'indivtrain_ind': [indivtrain_ind] * num_subj,
                                   'indivtrain_val': [indivtrain_values[n]] * num_subj,
-                                  'subj_num': np.arange(num_subj),
+                                  'subj_num': np.arange(num_subj) if subj is None else subj,
                                   'indiv_train_kappa': [model_kp] * num_subj,
                                   'indiv_test_kappa': [model_kp] * num_subj})
             # Add all the evaluations to the data frame
