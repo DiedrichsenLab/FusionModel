@@ -34,6 +34,8 @@ from FusionModel.util import *
 model_dir = 'Y:\data\Cerebellum\ProbabilisticParcellationModel'
 home = str(Path.home())
 if not Path(model_dir).exists():
+    model_dir = '/data/tge/dzhi/Indiv_par/Models'
+if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/cifs/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
@@ -137,9 +139,16 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
         dcbc_values (np.ndarray): the DCBC values of subjects
     """
     if trim_nan:
-        # mask the nan voxel pairs distance to nan for non-sparse tensor
-        dist[pt.where(pt.isnan(parcels))[0], :] = 0
-        dist[:, pt.where(pt.isnan(parcels))[0]] = 0
+        if not dist.is_sparse:
+            # mask the nan voxel pairs distance to nan for non-sparse tensor
+            dist[pt.where(pt.isnan(parcels))[0], :] = 0
+            dist[:, pt.where(pt.isnan(parcels))[0]] = 0
+        else:
+            idx = pt.where(~pt.isnan(parcels))[0] \
+                        if parcels.ndim==1 else \
+                        pt.where(~pt.isnan(parcels[0]))[0]
+            dist = pt.index_select(dist, 0, idx)
+            dist = pt.index_select(dist, 1, idx)
 
     dcbc_values, D_all = [], []
     for sub in range(testdata.shape[0]):
@@ -166,13 +175,13 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
         return pt.stack(dcbc_values)
 
 
-def calc_test_homogeneity(parcels, testdata, verbose=True):
+def calc_test_homogeneity(parcels, testdata, return_single=True, verbose=True):
     """Homogeneity: evaluate the resultant parcellation using homogeneity
     
     Args:
         parcels (torch.Tensor): the input probabilistic parcellation:
-            either group parcellation (2-dimensional: K x P) or
-            individual parcellation (num_subj x K x P )
+            either group parcellation (P-long vector) or
+            individual parcellation (num_subj x P )
         testdata (torch.Tensor): the functional test dataset,
                                 shape (num_sub, N, P)
         verbose (boolean): if true, display used time per each subject
@@ -181,26 +190,63 @@ def calc_test_homogeneity(parcels, testdata, verbose=True):
     Returns:
         homo_values (torch.Tensor): the homogeneity values of subjects
     """
-
     homo_values = []
     for sub in range(testdata.shape[0]):
         tic = time.perf_counter()
         if parcels.ndim == 1:
             D = ev.homogeneity(testdata[sub], parcels,
-                               z_transfer=True)
+                               single_return=return_single)
         elif parcels.ndim == 2:
             D = ev.homogeneity(testdata[sub], parcels[sub],
-                               z_transfer=True)
+                               single_return=return_single)
         else:
-            raise ValueError('The input parcellation must be 2D or 3D')
+            raise ValueError('The input parcellation must be 1D '
+                             'or 2D hard parcellations!')
     
         homo_values.append(D)
         toc = time.perf_counter()
         if verbose:
-            print(f"Subject {sub}: {toc-tic:0.4f}s")
+            print(f"Rest homogeneity - subject {sub}: "
+                  f"{toc-tic:0.4f}s")
 
     return pt.stack(homo_values)
 
+def calc_test_task_inhomogeneity(parcels, testdata, return_single=True,
+                                 verbose=True):
+    """ Evaluate the resultant parcellation using task inhomogeneity
+
+    Args:
+        parcels (torch.Tensor): the input probabilistic parcellation:
+            either group parcellation (2-dimensional: K x P) or
+            individual parcellation (num_subj x K x P )
+        testdata (torch.Tensor): the functional test dataset,
+                                shape (num_sub, N, P)
+        verbose (boolean): if true, display used time per each subject
+            evaluation. Otherwise, no display
+
+    Returns:
+        homo_values (torch.Tensor): the homogeneity values of subjects
+    """
+    inhomo_values = []
+    for sub in range(testdata.shape[0]):
+        tic = time.perf_counter()
+        if parcels.ndim == 1:
+            D = ev.task_inhomogeneity(testdata[sub], parcels,
+                                      single_return=return_single)
+        elif parcels.ndim == 2:
+            D = ev.task_inhomogeneity(testdata[sub], parcels[sub],
+                                      single_return=return_single)
+        else:
+            raise ValueError('The input parcellation must be 1D '
+                             'or 2D hard parcellations!')
+
+        inhomo_values.append(D)
+        toc = time.perf_counter()
+        if verbose:
+            print(f"Task inhomogeneity - subject {sub}: "
+                  f"{toc - tic:0.4f}s")
+
+    return pt.stack(inhomo_values)
 
 def run_prederror(model_names, test_data, test_sess, cond_ind,
                   part_ind=None, eval_types=['group', 'floor'],
