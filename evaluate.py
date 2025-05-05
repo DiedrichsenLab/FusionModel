@@ -36,6 +36,8 @@ home = str(Path.home())
 if not Path(model_dir).exists():
     model_dir = '/data/tge/dzhi/Indiv_par/Models'
 if not Path(model_dir).exists():
+    model_dir = '/home/dzhi/eris_mount/dzhi/Indiv_par'
+if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
     model_dir = '/cifs/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
@@ -49,6 +51,8 @@ if not Path(model_dir).exists():
 base_dir = '/Volumes/diedrichsen_data$/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = '/srv/diedrichsen/data/FunctionalFusion'
+if not Path(base_dir).exists():
+    base_dir = '/home/dzhi/eris_mount/Tian/UKBB_full/imaging'
 if not Path(base_dir).exists():
     base_dir = '/cifs/diedrichsen/data/FunctionalFusion'
 if not Path(base_dir).exists():
@@ -139,16 +143,15 @@ def calc_test_dcbc(parcels, testdata, dist, max_dist=35, bin_width=1,
         dcbc_values (np.ndarray): the DCBC values of subjects
     """
     if trim_nan:
-        if not dist.is_sparse:
-            # mask the nan voxel pairs distance to nan for non-sparse tensor
-            dist[pt.where(pt.isnan(parcels))[0], :] = 0
-            dist[:, pt.where(pt.isnan(parcels))[0]] = 0
-        else:
-            idx = pt.where(~pt.isnan(parcels))[0] \
-                        if parcels.ndim==1 else \
-                        pt.where(~pt.isnan(parcels[0]))[0]
-            dist = pt.index_select(dist, 0, idx)
-            dist = pt.index_select(dist, 1, idx)
+        idx = pt.where(~pt.isnan(parcels))[0] \
+                    if parcels.ndim==1 else \
+                    pt.where(~pt.isnan(parcels[0]))[0]
+            
+        parcels = parcels[idx] if parcels.ndim==1 else \
+                    parcels[:,idx]
+        testdata = testdata[:,:,idx]
+        dist = pt.index_select(dist, 0, idx)
+        dist = pt.index_select(dist, 1, idx)
 
     dcbc_values, D_all = [], []
     for sub in range(testdata.shape[0]):
@@ -206,7 +209,7 @@ def calc_test_homogeneity(parcels, testdata, return_single=True, verbose=True):
         homo_values.append(D)
         toc = time.perf_counter()
         if verbose:
-            print(f"Rest homogeneity - subject {sub}: "
+            print(f"Homogeneity - subject {sub}: "
                   f"{toc-tic:0.4f}s")
 
     return pt.stack(homo_values)
@@ -247,6 +250,43 @@ def calc_test_task_inhomogeneity(parcels, testdata, return_single=True,
                   f"{toc - tic:0.4f}s")
 
     return pt.stack(inhomo_values)
+
+
+def calc_test_zvalue(parcels, testdata, return_single=True, verbose=True):
+    """Homogeneity: evaluate the resultant parcellation using homogeneity
+
+    Args:
+        parcels (torch.Tensor): the input probabilistic parcellation:
+            either group parcellation (P-long vector) or
+            individual parcellation (num_subj x P )
+        testdata (torch.Tensor): the functional test dataset,
+                                shape (num_sub, N, P)
+        verbose (boolean): if true, display used time per each subject
+            evaluation. Otherwise, no display
+
+    Returns:
+        homo_values (torch.Tensor): the homogeneity values of subjects
+    """
+    z_values = []
+    for sub in range(testdata.shape[0]):
+        tic = time.perf_counter()
+        if parcels.ndim == 1:
+            D = ev.mean_z_value(testdata[sub], parcels, z_transfer=True,
+                               single_return=return_single)
+        elif parcels.ndim == 2:
+            D = ev.mean_z_value(testdata[sub], parcels[sub], z_transfer=True,
+                               single_return=return_single)
+        else:
+            raise ValueError('The input parcellation must be 1D '
+                             'or 2D hard parcellations!')
+
+        z_values.append(D)
+        toc = time.perf_counter()
+        if verbose:
+            print(f"Mean z-value - subject {sub}: "
+                  f"{toc - tic:0.4f}s")
+
+    return pt.stack(z_values)
 
 def run_prederror(model_names, test_data, test_sess, cond_ind,
                   part_ind=None, eval_types=['group', 'floor'],

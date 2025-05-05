@@ -1,8 +1,7 @@
-from turtle import title
 import numpy as np
 import nibabel as nb
 import SUITPy as suit
-import pickle
+import pickle, psutil
 import Functional_Fusion.atlas_map as am
 import Functional_Fusion.dataset as dt
 import pandas as pd
@@ -13,7 +12,7 @@ import HierarchBayesParcel.evaluation as ev
 import HierarchBayesParcel.full_model as fm
 from pathlib import Path
 import FusionModel.similarity_colormap as sc
-import FusionModel.depreciated.hierarchical_clustering as cl
+# import FusionModel.depreciated.hierarchical_clustering as cl
 import nitools as nt
 import scipy.io as spio
 from scipy.sparse import block_diag, coo_matrix
@@ -21,8 +20,12 @@ import scipy.ndimage as snd
 
 # Set directories for the entire project - just set here and import everywhere
 # else
-model_dir = 'Y:/data/Cerebellum/ProbabilisticParcellationModel'
+model_dir = '/data/tge/dzhi/Indiv_par'
 home = str(Path.home())
+if not Path(model_dir).exists():
+    model_dir = 'Y:/data/Cerebellum/ProbabilisticParcellationModel'
+if not Path(model_dir).exists():
+    model_dir = '/home/dzhi/eris_mount/dzhi/Indiv_par'
 if not Path(model_dir).exists():
     model_dir = '/srv/diedrichsen/data/Cerebellum/ProbabilisticParcellationModel'
 if not Path(model_dir).exists():
@@ -38,7 +41,11 @@ if not Path(model_dir).exists():
 if not Path(model_dir).exists():
     raise (NameError('Could not find model_dir'))
 
-base_dir = '/Volumes/diedrichsen_data$/data/FunctionalFusion'
+base_dir = '/data/tge/Tian/UKBB_full/imaging'
+if not Path(base_dir).exists():
+    base_dir = '/home/dzhi/eris_mount/Tian/UKBB_full/imaging'
+if not Path(base_dir).exists():
+    base_dir = '/Volumes/diedrichsen_data$/data/FunctionalFusion'
 if not Path(base_dir).exists():
     base_dir = '/srv/diedrichsen/data/FunctionalFusion'
 if not Path(base_dir).exists():
@@ -57,12 +64,13 @@ if not Path(base_dir).exists():
 atlas_dir = base_dir + f'/Atlases'
 
 # pytorch cuda global flag
+pt.cuda.is_available = lambda : True
 if pt.cuda.is_available():
-    default_device = pt.device('cuda')
-    pt.set_default_tensor_type(pt.cuda.FloatTensor)
+    DEVICE = 'cuda'
 else:
-    default_device = pt.device('cpu')
-    pt.set_default_tensor_type(pt.FloatTensor)
+    DEVICE = 'cpu'
+pt.set_default_device(DEVICE)
+pt.set_default_dtype(pt.float32)
 
 # Keep track of cuda memory
 def report_cuda_memory():
@@ -72,6 +80,12 @@ def report_cuda_memory():
         mr = pt.cuda.memory_reserved() / 1024 / 1024
         print(
             f'Allocated:{ma:.2f} MB, MaxAlloc:{mma:.2f} MB, Reserved {mr:.2f} MB')
+
+# print the current CPU memory usage
+def print_memory_usage():
+    process = psutil.Process()
+    mem_info = process.memory_info()
+    print(f"CPU Memory Usage: {mem_info.rss / (1024 ** 2):.2f} MB")
 
 def cal_corr(Y_target, Y_source):
     """ Matches the rows of two Y_source matrix to Y_target
@@ -176,43 +190,48 @@ def get_fs32k_neighbours(include_self=True, remove_mw=True, return_type='pt_csr'
 
     '''
     atlas, info = am.get_atlas('fs32k', atlas_dir=base_dir + '/Atlases')
+    neighbours = []
 
-    mat = nb.load(atlas_dir + '/tpl-fs32k/tpl_fs32k_hemi-L_sphere.surf.gii')
-    surf = [x.data for x in mat.darrays]
+    for i, hemis in enumerate(['L', 'R']):
+        mat = nb.load(atlas_dir + f'/tpl-fs32k/tpl-fs32k_hemi-{hemis}_sphere.surf.gii')
+        surf = [x.data for x in mat.darrays]
+        surf_vertices = surf[0]
+        surf_faces = surf[1]
 
-    surf_vertices = surf[0]
-    surf_faces = surf[1]
+        neigh = np.zeros([surf_vertices.shape[0], surf_vertices.shape[0]], dtype=int)
+        for idx in range(surf_vertices.shape[0]):
+            # the surf faces usually shape of [N,3] because a typical mesh is a triangle
+            connected_idx = np.where(np.any(surf_faces == idx, axis=1))[0]
+            connected = np.unique(surf_faces[connected_idx,:])
+            neigh[idx, connected] = 1
 
-    neigh = np.zeros([surf_vertices.shape[0], surf_vertices.shape[0]])
-    for idx in range(surf_vertices.shape[0]):
-        # the surf faces usually shape of [N,3] because a typical mesh is a triangle
-        connected_idx = np.where(np.any(surf_faces == idx, axis=1))[0]
-        connected = np.unique(surf_faces[connected_idx,:])
-        neigh[idx, connected] = 1
+        if not include_self:
+            np.fill_diagonal(neigh, 0)
+        # Remove medial wall if applied
+        if remove_mw:
+            neigh = neigh[:, atlas.vertex[i]][atlas.vertex[i], :]
 
-    if not include_self:
-        np.fill_diagonal(neigh, 0)
-
-    # Remove medial wall if applied
-    if remove_mw:
-        neigh = neigh[:, atlas.vertex[0]][atlas.vertex[0], :]
+        neighbours.append(neigh)
+        del neigh
+    
+    neighbours = block_diag(neighbours).toarray()
 
     # Return types
     if return_type == 'full':
-        return neigh
+        return neighbours
     elif return_type == 'sparse_coo':
-        return coo_matrix(neigh)
+        return coo_matrix(neighbours)
     elif return_type == 'pt_coo':
-        return pt.sparse_coo_tensor(np.argwhere(neigh != 0).T,
-                                    pt.tensor(neigh[neigh != 0],
+        return pt.sparse_coo_tensor(np.argwhere(neighbours != 0).T,
+                                    pt.tensor(neighbours[neighbours != 0],
                                               dtype=pt.get_default_dtype()),
-                                    neigh.shape)
+                                    neighbours.shape)
     elif return_type == 'pt_csr':
-        neigh = pt.sparse_coo_tensor(np.argwhere(neigh != 0).T,
-                                    pt.tensor(neigh[neigh != 0],
+        neighbours = pt.sparse_coo_tensor(np.argwhere(neighbours != 0).T,
+                                    pt.tensor(neighbours[neighbours != 0],
                                               dtype=pt.get_default_dtype()),
-                                    neigh.shape)
-        return neigh.to_sparse_csr()
+                                    neighbours.shape)
+        return neighbours.to_sparse_csr()
 
 
 def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
@@ -225,7 +244,7 @@ def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
 
     # Remove medial wall if applied
     if remove_mw:
-        dist = dist[:, atlas.vertex[0]][atlas.vertex[0], :]
+        dist = dist.tocsr()[:, atlas.vertex[0]][atlas.vertex[0], :]
 
     # Concatenate both hemispheres if `full`
     if hemis == 'full':
@@ -238,10 +257,10 @@ def load_fs32k_dist(file_type='distGOD_sp', hemis='full', remove_mw=True,
                          'or whole cortex!')
 
     # Convert the numpy sparse matrix to a PyTorch sparse tensor
-    coo_matrix = dist.tocoo()
-    indices = pt.LongTensor(np.vstack((coo_matrix.row, coo_matrix.col)))
-    values = pt.FloatTensor(coo_matrix.data)
-    shape = coo_matrix.shape
+    c_matrix = dist.tocoo()
+    indices = pt.LongTensor(np.vstack((c_matrix.row, c_matrix.col)))
+    values = pt.FloatTensor(c_matrix.data)
+    shape = c_matrix.shape
     sparse_tensor = pt.sparse_coo_tensor(indices, values, pt.Size(shape))
 
     return sparse_tensor.to(device=device)
@@ -280,15 +299,16 @@ def get_fs32k_weights(file_type='distGOD_sp', hemis='full', remove_mw=True,
 
     # create a diagonal tensor - fill by zeros
     N = sparse_tensor.shape[0]
-    diagonal_tensor = pt.sparse_coo_tensor(np.stack([np.arange(N), np.arange(N)]),
-                                           pt.FloatTensor(np.full((N,), 0)),
-                                           pt.Size([N, N]))
+    # diagonal_tensor = pt.sparse_coo_tensor(np.stack([np.arange(N), np.arange(N)]),
+    #                                        pt.FloatTensor(np.full((N,), 0)),
+    #                                        pt.Size([N, N]))
 
     # change the values of the matrix by given kernel
-    weights = sparse_tensor + diagonal_tensor
+    weights = sparse_tensor.coalesce()
     values = weights._values()
     if kernel == 'gaussian':
         values = pt.exp(-values ** 2 / (2*sigma**2))
+        values = (values - values.min()) / (values.max() - values.min())
     elif kernel == 'connectivity':
         values = pt.ones_like(values)
     else:
@@ -337,8 +357,8 @@ def get_cmap(mname, load_best=True, sym=False):
 
     return cmap.colors
 
-def write_model_to_labelcifti(mname, align=True, col_names=None,
-                              load='best', oname='', device='cuda'):
+def write_model_to_labelcifti(mname, align=True, col_names=None, label_names=None,
+                              label_RGBA=None, load='best', oname='', device='cuda'):
 
     if load == 'best':
         models, infos = [], []
@@ -357,7 +377,12 @@ def write_model_to_labelcifti(mname, align=True, col_names=None,
                             'the best model or all models.')
 
     # Align models if requested
-    if align:
+    if isinstance(align, np.ndarray or pt.Tensor):
+        if type(align) is np.ndarray:
+            align = pt.tensor(align, dtype=pt.get_default_dtype(), device=device)
+        indx = ev.matching_greedy(align, models[0].marginal_prob())
+        Prob = models[0].marginal_prob()[indx,:].T
+    elif align:
         Prob = ev.align_models(models, in_place=False)
     else:
         Prob = ev.extract_marginal_prob(models)
@@ -366,11 +391,20 @@ def write_model_to_labelcifti(mname, align=True, col_names=None,
     # Get winner-take all parcels
     parcel = Prob.cpu().numpy().argmax(axis=1) + 1
 
+    # Get the indices of the maximum values in each column
+    # Prob = Prob.T
+    # _, max_indices = pt.max(Prob, dim=0)
+    # result = pt.full_like(Prob, float('nan'))
+    # result[max_indices, pt.arange(Prob.size(1))] = Prob[max_indices, pt.arange(Prob.size(1))]
+
+
     if col_names is None:
         col_names = [f'col_{i+1}' for i in range(parcel.shape[0])]
 
     img = nt.make_label_cifti(parcel.T, atlas.get_brain_model_axis(),
-                              column_names=col_names)
+                              column_names=col_names, 
+                              label_names=label_names,
+                              label_RGBA=label_RGBA)
     nb.save(img, model_dir + f'/Models/{oname}.dlabel.nii')
 
 def plot_data_flat(data, atlas,
