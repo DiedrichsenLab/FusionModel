@@ -253,7 +253,7 @@ def calc_test_task_inhomogeneity(parcels, testdata, return_single=True,
 
 
 def calc_test_zvalue(parcels, testdata, return_single=True, verbose=True):
-    """Homogeneity: evaluate the resultant parcellation using homogeneity
+    """Z-value: evaluate the resultant parcellation using mean z value
 
     Args:
         parcels (torch.Tensor): the input probabilistic parcellation:
@@ -261,20 +261,22 @@ def calc_test_zvalue(parcels, testdata, return_single=True, verbose=True):
             individual parcellation (num_subj x P )
         testdata (torch.Tensor): the functional test dataset,
                                 shape (num_sub, N, P)
+        return_single (boolean): if true, retrun averaged z-values
+                                across all parcels
         verbose (boolean): if true, display used time per each subject
             evaluation. Otherwise, no display
 
     Returns:
-        homo_values (torch.Tensor): the homogeneity values of subjects
+        z_values (torch.Tensor): the mean z-values of subjects
     """
     z_values = []
     for sub in range(testdata.shape[0]):
         tic = time.perf_counter()
         if parcels.ndim == 1:
-            D = ev.mean_z_value(testdata[sub], parcels, z_transfer=True,
+            D = ev.mean_z_value(testdata[sub], parcels, z_transfer=False,
                                single_return=return_single)
         elif parcels.ndim == 2:
-            D = ev.mean_z_value(testdata[sub], parcels[sub], z_transfer=True,
+            D = ev.mean_z_value(testdata[sub], parcels[sub], z_transfer=False,
                                single_return=return_single)
         else:
             raise ValueError('The input parcellation must be 1D '
